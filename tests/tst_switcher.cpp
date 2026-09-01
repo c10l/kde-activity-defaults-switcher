@@ -122,6 +122,7 @@ private slots:
     void captureRecordsUserEditAsBindingForCurrentActivity();
     void captureDoesNotRecordWhenNothingChanged();
     void captureIgnoresDaemonsOwnWrite();
+    void captureDoesNotTreatDaemonsFirstWriteAsUserEdit();
     void captureSkipsEmptyDefault();
     void captureEditRecordsBindingAndFlipsDefault();
 
@@ -397,6 +398,42 @@ void SwitcherTest::captureIgnoresDaemonsOwnWrite()
     // default so nothing is rewritten either.
     QCOMPARE(storePtr->saves, 0);
     QCOMPARE(written, 0);
+}
+
+void SwitcherTest::captureDoesNotTreatDaemonsFirstWriteAsUserEdit()
+{
+    // Fresh setup: no mimeapps.list entry for the browser yet, so the
+    // currentDefaults map is empty. The baseline activity carries the binding
+    // and Work has none. Switching to Work makes the daemon write the baseline
+    // binding - creating the file. The watcher event that follows must not be
+    // captured as a user edit: that would pin the baseline binding into Work's
+    // profile and break baseline fallback (user story 7).
+    Profile baseline;
+    baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
+    const QMap<ActivityId, Profile> profiles{{QStringLiteral("default-uuid"), baseline}};
+    const Activity workActivity{QStringLiteral("work-uuid"), QStringLiteral("Work")};
+    const Activity defaultActivity{QStringLiteral("default-uuid"), QStringLiteral("Default")};
+    const auto baselineActivity = Resolver::selectBaselineActivity({workActivity, defaultActivity});
+
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    Switcher switcher(std::make_unique<Resolver>(), std::make_unique<Writer>(), std::move(store));
+
+    // No mimeapps.list entry at all: currentDefaults is empty. The daemon
+    // resolves the baseline binding and writes it, creating the file.
+    switcher.switchActivity(workActivity, baselineActivity, profiles, {});
+
+    // The daemon's own write lands in the file; the watcher fires and reads
+    // the new state (browser now present in mimeapps.list).
+    const int written = switcher.captureUserEdits(workActivity, baselineActivity, profiles,
+                                                  {{Component::Browser, QStringLiteral("firefox.desktop")}});
+
+    // Not a user edit: nothing recorded for Work, and the decision matches the
+    // current default so nothing is rewritten either.
+    QCOMPARE(storePtr->saves, 0);
+    QCOMPARE(written, 0);
+    QVERIFY(!storePtr->saved.value(QStringLiteral("work-uuid")).hasBinding(Component::Browser));
 }
 
 void SwitcherTest::captureSkipsEmptyDefault()

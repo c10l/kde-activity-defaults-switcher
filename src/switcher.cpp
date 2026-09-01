@@ -54,12 +54,14 @@ int Switcher::applyAndRemember(const Activity &currentActivity,
 
     // Remember the state the system should now hold: every decision (the
     // writer made the system match it, or it already matched), plus any
-    // current default the resolver left untouched.
+    // current default the resolver left untouched. Decisions are recorded even
+    // for components absent from currentDefaults (e.g. a fresh setup where
+    // mimeapps.list had no entry yet and the daemon's own write created it) -
+    // otherwise the next file-watcher event would mistake that write for a
+    // user edit and record a spurious binding.
     m_lastDefaults = currentDefaults;
     for (auto it = decisions.constBegin(); it != decisions.constEnd(); ++it) {
-        if (currentDefaults.contains(it.key())) {
-            m_lastDefaults.insert(it.key(), it.value());
-        }
+        m_lastDefaults.insert(it.key(), it.value());
     }
     return written;
 }
