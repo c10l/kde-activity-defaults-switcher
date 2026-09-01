@@ -11,3 +11,8 @@
 - [ ] Falls back to the baseline activity's browser binding when the activity has none.
 - [ ] Uses the resolver from 01 (does not re-implement resolution).
 - [ ] One verifiable end-to-end check: change activity → browser default changes.
+
+**Polish (from review of 02, in this order):**
+- [ ] Introduce `using ActivityId = QString;` and use it for `Activity::id` and the profiles map key, so "keyed by id" is explicit in the types.
+- [ ] Drop the now-unused id-only `Activity::operator==` unless a caller needs it.
+- [ ] Optionally strengthen `componentWithoutDecisionAbsentFromNonEmptyResult` to assert every non-resolved component is absent, not just Email and Terminal.
