@@ -24,33 +24,36 @@ private slots:
     void emptyActivityFallsBackToBaseline();
     void emptyProfilesCaptureCurrentDefaults();
     void componentWithNoDecisionIsAbsent();
+    void componentWithoutDecisionAbsentFromNonEmptyResult();
     void profileExposesBindings();
 };
 
 void ResolverTest::baselineIsDefaultWhenPresent()
 {
     const QList<Activity> activities{
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Default")},
-        Activity{QStringLiteral("Personal")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
+        Activity{QStringLiteral("personal-uuid"), QStringLiteral("Personal")},
     };
 
     const auto baseline = Resolver::selectBaselineActivity(activities);
 
     QVERIFY(baseline.has_value());
+    QCOMPARE(baseline->id, QStringLiteral("default-uuid"));
     QCOMPARE(baseline->name, QStringLiteral("Default"));
 }
 
 void ResolverTest::baselineIsFirstWhenNoDefault()
 {
     const QList<Activity> activities{
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Personal")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("personal-uuid"), QStringLiteral("Personal")},
     };
 
     const auto baseline = Resolver::selectBaselineActivity(activities);
 
     QVERIFY(baseline.has_value());
+    QCOMPARE(baseline->id, QStringLiteral("work-uuid"));
     QCOMPARE(baseline->name, QStringLiteral("Work"));
 }
 
@@ -72,14 +75,14 @@ void ResolverTest::currentBindingWinsOverBaseline()
     baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
 
     const QMap<QString, Profile> profiles{
-        {QStringLiteral("Work"), work},
-        {QStringLiteral("Default"), baseline},
+        {QStringLiteral("work-uuid"), work},
+        {QStringLiteral("default-uuid"), baseline},
     };
 
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         profiles,
         {});
 
@@ -95,14 +98,14 @@ void ResolverTest::baselineBindingUsedWhenCurrentHasNone()
     baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
 
     const QMap<QString, Profile> profiles{
-        {QStringLiteral("Work"), work},
-        {QStringLiteral("Default"), baseline},
+        {QStringLiteral("work-uuid"), work},
+        {QStringLiteral("default-uuid"), baseline},
     };
 
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         profiles,
         {});
 
@@ -112,8 +115,8 @@ void ResolverTest::baselineBindingUsedWhenCurrentHasNone()
 void ResolverTest::capturesCurrentDefaultWhenNeitherHasBinding()
 {
     const QMap<QString, Profile> profiles{
-        {QStringLiteral("Work"), Profile{}},
-        {QStringLiteral("Default"), Profile{}},
+        {QStringLiteral("work-uuid"), Profile{}},
+        {QStringLiteral("default-uuid"), Profile{}},
     };
 
     const QMap<Component, Application> currentDefaults{
@@ -122,8 +125,8 @@ void ResolverTest::capturesCurrentDefaultWhenNeitherHasBinding()
 
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         profiles,
         currentDefaults);
 
@@ -139,8 +142,8 @@ void ResolverTest::componentsResolveIndependently()
     baseline.setBinding(Component::Email, QStringLiteral("baseline-mail.desktop"));
 
     const QMap<QString, Profile> profiles{
-        {QStringLiteral("Work"), work},
-        {QStringLiteral("Default"), baseline},
+        {QStringLiteral("work-uuid"), work},
+        {QStringLiteral("default-uuid"), baseline},
     };
 
     const QMap<Component, Application> currentDefaults{
@@ -149,8 +152,8 @@ void ResolverTest::componentsResolveIndependently()
 
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         profiles,
         currentDefaults);
 
@@ -165,13 +168,13 @@ void ResolverTest::unknownActivityFallsBackToBaseline()
     baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
 
     const QMap<QString, Profile> profiles{
-        {QStringLiteral("Default"), baseline},
+        {QStringLiteral("default-uuid"), baseline},
     };
 
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("DoesNotExist")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral("unknown-uuid"), QStringLiteral("DoesNotExist")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         profiles,
         {});
 
@@ -184,13 +187,13 @@ void ResolverTest::emptyActivityFallsBackToBaseline()
     baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
 
     const QMap<QString, Profile> profiles{
-        {QStringLiteral("Default"), baseline},
+        {QStringLiteral("default-uuid"), baseline},
     };
 
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral(""), QStringLiteral("")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         profiles,
         {});
 
@@ -206,8 +209,8 @@ void ResolverTest::emptyProfilesCaptureCurrentDefaults()
 
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         {},
         currentDefaults);
 
@@ -219,13 +222,31 @@ void ResolverTest::componentWithNoDecisionIsAbsent()
 {
     const Resolver resolver;
     const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("Work")},
-        Activity{QStringLiteral("Default")},
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
         {},
         {});
 
     QVERIFY(!decisions.contains(Component::Browser));
     QVERIFY(decisions.isEmpty());
+}
+
+void ResolverTest::componentWithoutDecisionAbsentFromNonEmptyResult()
+{
+    const QMap<Component, Application> currentDefaults{
+        {Component::Browser, QStringLiteral("chromium.desktop")},
+    };
+
+    const Resolver resolver;
+    const auto decisions = resolver.resolve(
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
+        {},
+        currentDefaults);
+
+    QCOMPARE(decisions.value(Component::Browser), QStringLiteral("chromium.desktop"));
+    QVERIFY(!decisions.contains(Component::Email));
+    QVERIFY(!decisions.contains(Component::Terminal));
 }
 
 void ResolverTest::profileExposesBindings()

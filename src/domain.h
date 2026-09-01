@@ -33,14 +33,17 @@ enum class Component {
 // Every component, in a stable order.
 QList<Component> allComponents();
 
-// An Activity is the workspace unit this tool keys profiles by.
+// An Activity is the workspace unit this tool keys profiles by. KDE
+// identifies activities by UUID; the name is user-renamable, so profiles are
+// keyed by id and the name is carried alongside for the baseline selection.
 struct Activity {
+    QString id;
     QString name;
 };
 
 inline bool operator==(const Activity &a, const Activity &b)
 {
-    return a.name == b.name;
+    return a.id == b.id;
 }
 
 // A Binding is a single assignment of one application to one component within
@@ -79,6 +82,7 @@ public:
     // Resolution order per component: the current activity's binding, then the
     // baseline activity's binding, then capture the current default
     // application. A component with none of those is absent from the result.
+    // `profiles` is keyed by activity id.
     QMap<Component, Application> resolve(
         const Activity &currentActivity,
         const std::optional<Activity> &baselineActivity,

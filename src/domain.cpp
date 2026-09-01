@@ -79,9 +79,9 @@ QMap<Component, Application> Resolver::resolve(
     const QMap<QString, Profile> &profiles,
     const QMap<Component, Application> &currentDefaults) const
 {
-    const Profile currentProfile = profiles.value(currentActivity.name);
+    const Profile currentProfile = profiles.value(currentActivity.id);
     const Profile baselineProfile = baselineActivity.has_value()
-        ? profiles.value(baselineActivity->name)
+        ? profiles.value(baselineActivity->id)
         : Profile{};
 
     QMap<Component, Application> decisions;
