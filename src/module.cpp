@@ -15,37 +15,45 @@ ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(QObject *parent, 
 {
     Q_UNUSED(args);
 
-    // Watch mimeapps.list (and its directory, to notice the file's creation)
-    // so System Settings edits reach the switcher's capture path. A
-    // QFileSystemWatcher is used instead of KConfigWatcher because
+    // Watch mimeapps.list and kdeglobals (and their directory, to notice a
+    // file's creation) so System Settings edits reach the switcher's capture
+    // path. A QFileSystemWatcher is used instead of KConfigWatcher because
     // KConfigWatcher only fires for writes done with the KConfig Notify flag,
     // and both the System Settings component chooser and our writer write
-    // mimeapps.list without it (KApplicationTrader::setPreferredService) - so
-    // it would never observe a real edit.
+    // these files without it (KApplicationTrader::setPreferredService and the
+    // kdeglobals write) - so it would never observe a real edit.
     const QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     m_mimeappsPath = configDir + QStringLiteral("/mimeapps.list");
+    m_kdeglobalsPath = configDir + QStringLiteral("/kdeglobals");
     if (!configDir.isEmpty() && QFile::exists(configDir)) {
         m_watcher.addPath(configDir);
     }
-    ensureMimeappsWatched();
-    // File-change events can arrive while mimeapps.list is still being
+    ensureConfigWatched(m_mimeappsPath);
+    ensureConfigWatched(m_kdeglobalsPath);
+    // File-change events can arrive while a config file is still being
     // written (KConfig truncates and rewrites it), so edits are coalesced and
     // only processed once the file has settled.
     m_editTimer.setSingleShot(true);
     m_editTimer.setInterval(100);
     connect(&m_editTimer, &QTimer::timeout, this, [this]() {
-        onMimeappsChanged();
+        onDefaultsChanged();
     });
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
         m_editTimer.start();
     });
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
-        // A directory event can mean mimeapps.list was created (or recreated
-        // after being deleted). Edits to an existing file arrive via
+        // A directory event can mean a watched config file was created (or
+        // recreated after being deleted). Edits to an existing file arrive via
         // fileChanged; the rest of the directory noise (KDE writes plenty of
         // config files) is ignored.
-        if (!m_watcher.files().contains(m_mimeappsPath) && QFile::exists(m_mimeappsPath)) {
-            m_watcher.addPath(m_mimeappsPath);
+        bool appeared = false;
+        for (const QString &path : {m_mimeappsPath, m_kdeglobalsPath}) {
+            if (!m_watcher.files().contains(path) && QFile::exists(path)) {
+                m_watcher.addPath(path);
+                appeared = true;
+            }
+        }
+        if (appeared) {
             m_editTimer.start();
         }
     });
@@ -78,8 +86,11 @@ QString ActivityDefaultsSwitcherModule::activityName(const QString &id)
     return info->name();
 }
 
-QList<Activity> ActivityDefaultsSwitcherModule::orderedActivities()
+QList<Activity> ActivityDefaultsSwitcherModule::allActivities()
 {
+    // The consumer's list has no ordering guarantee; the resolver imposes the
+    // canonical order itself (orderedActivityList), so this is just the raw
+    // set of activities.
     QList<Activity> activities;
     const QStringList ids = m_consumer->activities();
     activities.reserve(ids.size());
@@ -96,31 +107,31 @@ void ActivityDefaultsSwitcherModule::refresh()
     }
 
     const QString currentId = m_consumer->currentActivity();
-    const QList<Activity> activities = orderedActivities();
+    const QList<Activity> activities = allActivities();
     const Activity current{currentId, activityName(currentId)};
     const std::optional<Activity> baseline = Resolver::selectBaselineActivity(activities);
 
-    m_switcher.switchActivity(current, baseline, m_store.load(), readCurrentMimeDefaults());
+    m_switcher.switchActivity(current, baseline, m_store.load(), readCurrentDefaults());
 }
 
-void ActivityDefaultsSwitcherModule::onMimeappsChanged()
+void ActivityDefaultsSwitcherModule::onDefaultsChanged()
 {
     if (m_consumer->serviceStatus() != KActivities::Consumer::Running) {
         return;
     }
 
     const QString currentId = m_consumer->currentActivity();
-    const QList<Activity> activities = orderedActivities();
+    const QList<Activity> activities = allActivities();
     const Activity current{currentId, activityName(currentId)};
     const std::optional<Activity> baseline = Resolver::selectBaselineActivity(activities);
 
-    m_switcher.captureUserEdits(current, baseline, m_store.load(), readCurrentMimeDefaults());
+    m_switcher.captureUserEdits(current, baseline, m_store.load(), readCurrentDefaults());
 }
 
-void ActivityDefaultsSwitcherModule::ensureMimeappsWatched()
+void ActivityDefaultsSwitcherModule::ensureConfigWatched(const QString &path)
 {
-    if (QFile::exists(m_mimeappsPath) && !m_watcher.files().contains(m_mimeappsPath)) {
-        m_watcher.addPath(m_mimeappsPath);
+    if (QFile::exists(path) && !m_watcher.files().contains(path)) {
+        m_watcher.addPath(path);
     }
 }
 

@@ -30,7 +30,7 @@ An always-on KDE Plasma 6 daemon (a kded6 module) that, whenever the current Act
 - Ship as a **kded6 module** (auto-loaded), not a systemd service or shell script; event-driven rather than polling.
 - The **resolver** is a pure function; all domain rules live in it (see the repository glossary).
 - **Resolution order**: current activity's binding → baseline activity's binding → capture the current default application.
-- **Baseline activity selection**: the activity named "Default"; if none, the first activity in the ordered activity list.
+- **Baseline activity selection**: the activity named "Default"; if none, the first activity in the ordered activity list — ordered by name (case-insensitive), ties broken by id, since `KActivities::Consumer::activities()` documents no ordering guarantee.
 - **Components**: the 13 component-chooser categories — browser, email, filemanager, texteditor, calendar, geo, imageviewer, musicplayer, pdfviewer, tel, videoplayer, archivemanager, terminal — each mapped to its mime keys. Terminal is the exception: stored in kdeglobals, not mimeapps.
 - **Writing**: mime components via `KApplicationTrader::setPreferredService`; terminal via `kdeglobals` `TerminalService`/`TerminalApplication`. (ADR-0001.)
 - **Profile store**: a KConfig file, one group per component, activity id as key, storageId as value.

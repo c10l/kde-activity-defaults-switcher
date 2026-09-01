@@ -39,6 +39,31 @@ QString preferredService(const QString &mimeType)
     return line.section(QLatin1Char(';'), 0, 0).trimmed();
 }
 
+QByteArray kdeglobalsContent()
+{
+    QFile f(QStringLiteral("%1/kdeglobals").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
+    if (!f.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return f.readAll();
+}
+
+QString terminalService()
+{
+    // The terminal default is the kdeglobals [General] TerminalService entry
+    // - the same key the writer writes (ADR-0001).
+    const QString text = QString::fromUtf8(kdeglobalsContent());
+    const QString marker = QStringLiteral("TerminalService=");
+    const int at = text.indexOf(marker);
+    if (at < 0) {
+        return {};
+    }
+    const int valueStart = at + marker.size();
+    const int valueEnd = text.indexOf(QLatin1Char('\n'), valueStart);
+    const QString line = valueEnd < 0 ? text.mid(valueStart) : text.mid(valueStart, valueEnd - valueStart);
+    return line.trimmed();
+}
+
 // A fake resolver records every call and returns a scripted decision set.
 class FakeResolver : public Resolver
 {
@@ -118,11 +143,14 @@ private slots:
     void forwardsWriterResult();
     void switchingActivityFlipsBrowserDefault();
     void switchingActivityFlipsEveryComponent();
+    void switchingActivityFlipsTerminalDefault();
     void fallsBackToBaselineBrowserBinding();
     void captureRecordsUserEditAsBindingForCurrentActivity();
     void captureDoesNotRecordWhenNothingChanged();
     void captureIgnoresDaemonsOwnWrite();
     void captureDoesNotTreatDaemonsFirstWriteAsUserEdit();
+    void captureRecordsTerminalEditAsBindingForCurrentActivity();
+    void captureDoesNotTreatDaemonsTerminalWriteAsUserEdit();
     void captureSkipsEmptyDefault();
     void captureEditRecordsBindingAndFlipsDefault();
 
@@ -147,6 +175,18 @@ void SwitcherTest::initTestCase()
         desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n").arg(id).toUtf8());
         desktopFile.close();
     }
+    // The two terminal services the terminal tests switch between. Their Exec
+    // values differ from the storage ids so TerminalApplication can be asserted
+    // against the real executable name.
+    for (const QString &id : {QStringLiteral("org.kde.konsole.desktop"),
+                              QStringLiteral("org.kde.yakuake.desktop")}) {
+        QFile desktopFile(dataDir() + QStringLiteral("/applications/") + id);
+        QVERIFY(desktopFile.open(QIODevice::WriteOnly));
+        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n")
+                              .arg(id.section(QLatin1Char('.'), 2, 2))
+                              .toUtf8());
+        desktopFile.close();
+    }
 }
 
 QString SwitcherTest::configDir()
@@ -162,16 +202,18 @@ QString SwitcherTest::dataDir()
 void SwitcherTest::init()
 {
     // Each test starts from a clean config: the previous test's mimeapps.list
-    // is removed and the shared config cache re-read.
+    // and kdeglobals are removed and the shared config caches re-read.
     QFile::remove(configDir() + QStringLiteral("/mimeapps.list"));
     KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::SimpleConfig)->reparseConfiguration();
+    QFile::remove(configDir() + QStringLiteral("/kdeglobals"));
+    KSharedConfig::openConfig(QStringLiteral("kdeglobals"))->reparseConfiguration();
 }
 
 void SwitcherTest::appliesAllResolvedDecisionsToWriter()
 {
-    // Since ticket 05 the switcher forwards every resolved decision to the
-    // writer - the writer decides what it can write (mime components now,
-    // the terminal via kdeglobals in ticket 06).
+    // The switcher forwards every resolved decision to the writer - the
+    // writer decides what it can write (mime components to mimeapps.list,
+    // the terminal to kdeglobals).
     auto resolver = std::make_unique<FakeResolver>();
     resolver->decisions = {
         {Component::Browser, QStringLiteral("firefox.desktop")},
@@ -323,6 +365,32 @@ void SwitcherTest::fallsBackToBaselineBrowserBinding()
     QCOMPARE(preferredService(QStringLiteral("text/html")), QStringLiteral("firefox.desktop"));
 }
 
+void SwitcherTest::switchingActivityFlipsTerminalDefault()
+{
+    // The terminal flips per activity via kdeglobals, exactly like the mime
+    // components flip via mimeapps.list.
+    Profile work;
+    work.setBinding(Component::Terminal, QStringLiteral("org.kde.yakuake.desktop"));
+    Profile baseline;
+    baseline.setBinding(Component::Terminal, QStringLiteral("org.kde.konsole.desktop"));
+
+    const QMap<ActivityId, Profile> profiles{
+        {QStringLiteral("work-uuid"), work},
+        {QStringLiteral("default-uuid"), baseline},
+    };
+    const Activity workActivity{QStringLiteral("work-uuid"), QStringLiteral("Work")};
+    const Activity defaultActivity{QStringLiteral("default-uuid"), QStringLiteral("Default")};
+    const auto baselineActivity = Resolver::selectBaselineActivity({workActivity, defaultActivity});
+
+    Switcher switcher; // real resolver + real writer
+
+    QCOMPARE(switcher.switchActivity(workActivity, baselineActivity, profiles, {}), 1);
+    QCOMPARE(terminalService(), QStringLiteral("org.kde.yakuake.desktop"));
+
+    QCOMPARE(switcher.switchActivity(defaultActivity, baselineActivity, profiles, {}), 1);
+    QCOMPARE(terminalService(), QStringLiteral("org.kde.konsole.desktop"));
+}
+
 void SwitcherTest::captureRecordsUserEditAsBindingForCurrentActivity()
 {
     auto resolver = std::make_unique<FakeResolver>();
@@ -434,6 +502,77 @@ void SwitcherTest::captureDoesNotTreatDaemonsFirstWriteAsUserEdit()
     QCOMPARE(storePtr->saves, 0);
     QCOMPARE(written, 0);
     QVERIFY(!storePtr->saved.value(QStringLiteral("work-uuid")).hasBinding(Component::Browser));
+}
+
+void SwitcherTest::captureRecordsTerminalEditAsBindingForCurrentActivity()
+{
+    // Changing the terminal in System Settings while on an activity records a
+    // terminal binding for that activity, exactly like a browser edit does.
+    Profile baseline;
+    baseline.setBinding(Component::Terminal, QStringLiteral("org.kde.konsole.desktop"));
+    const QMap<ActivityId, Profile> profiles{{QStringLiteral("default-uuid"), baseline}};
+    const Activity workActivity{QStringLiteral("work-uuid"), QStringLiteral("Work")};
+    const Activity defaultActivity{QStringLiteral("default-uuid"), QStringLiteral("Default")};
+    const auto baselineActivity = Resolver::selectBaselineActivity({workActivity, defaultActivity});
+
+    Switcher switcher; // real everything
+
+    // Starting state: the terminal default is konsole (the baseline binding).
+    switcher.switchActivity(workActivity, baselineActivity, profiles, {});
+
+    // The user changes the terminal in System Settings while on Work: kdeglobals
+    // changes exactly as the component chooser writes it.
+    QFile kdeglobals(configDir() + QStringLiteral("/kdeglobals"));
+    QVERIFY(kdeglobals.open(QIODevice::WriteOnly));
+    kdeglobals.write("[General]\nTerminalService=org.kde.yakuake.desktop\nTerminalApplication=yakuake\n");
+    kdeglobals.close();
+
+    const int written = switcher.captureUserEdits(workActivity, baselineActivity, profiles,
+                                                  {{Component::Terminal, QStringLiteral("org.kde.yakuake.desktop")}});
+
+    // The edit is recorded for the current activity and persisted.
+    ProfileStore store;
+    const auto stored = store.load();
+    QCOMPARE(stored.value(QStringLiteral("work-uuid")).bindingFor(Component::Terminal),
+             QStringLiteral("org.kde.yakuake.desktop"));
+
+    // The system default already matches the edit, so nothing needed rewriting.
+    QCOMPARE(written, 0);
+    QCOMPARE(terminalService(), QStringLiteral("org.kde.yakuake.desktop"));
+}
+
+void SwitcherTest::captureDoesNotTreatDaemonsTerminalWriteAsUserEdit()
+{
+    // The terminal-side equivalent of the 05 m_lastDefaults fix: the daemon's
+    // own kdeglobals write must not be captured as a user edit, or a baseline
+    // terminal binding would be pinned into a child activity and break
+    // baseline fallback (user story 7).
+    Profile baseline;
+    baseline.setBinding(Component::Terminal, QStringLiteral("org.kde.konsole.desktop"));
+    const QMap<ActivityId, Profile> profiles{{QStringLiteral("default-uuid"), baseline}};
+    const Activity workActivity{QStringLiteral("work-uuid"), QStringLiteral("Work")};
+    const Activity defaultActivity{QStringLiteral("default-uuid"), QStringLiteral("Default")};
+    const auto baselineActivity = Resolver::selectBaselineActivity({workActivity, defaultActivity});
+
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    Switcher switcher(std::make_unique<Resolver>(), std::make_unique<Writer>(), std::move(store));
+
+    // No kdeglobals terminal entry yet: currentDefaults is empty. The daemon
+    // resolves the baseline terminal binding and writes it, creating the file.
+    switcher.switchActivity(workActivity, baselineActivity, profiles, {});
+
+    // The daemon's own write lands in the file; the watcher fires and reads
+    // the new state (terminal now present in kdeglobals).
+    const int written = switcher.captureUserEdits(workActivity, baselineActivity, profiles,
+                                                  {{Component::Terminal, QStringLiteral("org.kde.konsole.desktop")}});
+
+    // Not a user edit: nothing recorded for Work, and the decision matches the
+    // current default so nothing is rewritten either.
+    QCOMPARE(storePtr->saves, 0);
+    QCOMPARE(written, 0);
+    QVERIFY(!storePtr->saved.value(QStringLiteral("work-uuid")).hasBinding(Component::Terminal));
 }
 
 void SwitcherTest::captureSkipsEmptyDefault()

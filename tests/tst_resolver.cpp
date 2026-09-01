@@ -14,6 +14,8 @@ private slots:
     void baselineIsDefaultWhenPresent();
     void baselineIsFirstWhenNoDefault();
     void baselineIsEmptyWhenNoActivities();
+    void orderedActivityListSortsByNameCaseInsensitive();
+    void orderedActivityListTiesBrokenById();
 
     void currentBindingWinsOverBaseline();
     void baselineBindingUsedWhenCurrentHasNone();
@@ -46,6 +48,10 @@ void ResolverTest::baselineIsDefaultWhenPresent()
 
 void ResolverTest::baselineIsFirstWhenNoDefault()
 {
+    // No "Default" activity: the first activity in the canonical order (name,
+    // case-insensitive) supplies fallbacks - not the order the caller happened
+    // to supply, since KActivities::Consumer::activities() documents no
+    // ordering guarantee.
     const QList<Activity> activities{
         Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
         Activity{QStringLiteral("personal-uuid"), QStringLiteral("Personal")},
@@ -54,8 +60,38 @@ void ResolverTest::baselineIsFirstWhenNoDefault()
     const auto baseline = Resolver::selectBaselineActivity(activities);
 
     QVERIFY(baseline.has_value());
-    QCOMPARE(baseline->id, QStringLiteral("work-uuid"));
-    QCOMPARE(baseline->name, QStringLiteral("Work"));
+    QCOMPARE(baseline->id, QStringLiteral("personal-uuid"));
+    QCOMPARE(baseline->name, QStringLiteral("Personal"));
+}
+
+void ResolverTest::orderedActivityListSortsByNameCaseInsensitive()
+{
+    const QList<Activity> activities{
+        Activity{QStringLiteral("b-uuid"), QStringLiteral("beta")},
+        Activity{QStringLiteral("a-uuid"), QStringLiteral("Alpha")},
+        Activity{QStringLiteral("c-uuid"), QStringLiteral("Gamma")},
+    };
+
+    const QList<Activity> ordered = orderedActivityList(activities);
+
+    QCOMPARE(ordered.size(), 3);
+    QCOMPARE(ordered.at(0).name, QStringLiteral("Alpha"));
+    QCOMPARE(ordered.at(1).name, QStringLiteral("beta"));
+    QCOMPARE(ordered.at(2).name, QStringLiteral("Gamma"));
+}
+
+void ResolverTest::orderedActivityListTiesBrokenById()
+{
+    const QList<Activity> activities{
+        Activity{QStringLiteral("z-id"), QStringLiteral("Same")},
+        Activity{QStringLiteral("a-id"), QStringLiteral("same")},
+    };
+
+    const QList<Activity> ordered = orderedActivityList(activities);
+
+    QCOMPARE(ordered.size(), 2);
+    QCOMPARE(ordered.at(0).id, QStringLiteral("a-id"));
+    QCOMPARE(ordered.at(1).id, QStringLiteral("z-id"));
 }
 
 void ResolverTest::baselineIsEmptyWhenNoActivities()

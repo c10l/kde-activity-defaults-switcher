@@ -9,6 +9,28 @@
 
 namespace ads {
 
+namespace {
+
+// Writes the terminal binding to kdeglobals (ADR-0001): TerminalService holds
+// the .desktop storage id and TerminalApplication the executable, exactly as
+// the System Settings terminal component chooser writes them.
+void writeTerminal(const Application &application)
+{
+    KService::Ptr service = KService::serviceByStorageId(application);
+    if (!service) {
+        KDesktopFile desktopFile(application);
+        service = KService::Ptr(new KService(&desktopFile, application));
+    }
+
+    auto config = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
+    KConfigGroup general(config, QStringLiteral("General"));
+    general.writeEntry(QStringLiteral("TerminalService"), application);
+    general.writeEntry(QStringLiteral("TerminalApplication"), service->exec());
+    config->sync();
+}
+
+} // namespace
+
 QStringList mimeKeysFor(Component component)
 {
     switch (component) {
@@ -156,7 +178,7 @@ QStringList mimeKeysFor(Component component)
             QStringLiteral("application/x-lha"),
         };
     case Component::Terminal:
-        // The terminal lives in kdeglobals, not mimeapps.list (ticket 06).
+        // The terminal lives in kdeglobals, not mimeapps.list.
         return {};
     }
     return {};
@@ -208,12 +230,30 @@ QMap<Component, Application> readCurrentMimeDefaults()
     QMap<Component, Application> defaults;
     for (const Component component : allComponents()) {
         if (component == Component::Terminal) {
-            continue; // kdeglobals, ticket 06
+            continue; // kdeglobals
         }
         const QStringList entries = defaultApplications.readXdgListEntry(primaryMimeTypeFor(component));
         if (!entries.isEmpty()) {
             defaults.insert(component, entries.first());
         }
+    }
+    return defaults;
+}
+
+Application readCurrentTerminalDefault()
+{
+    auto config = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
+    config->reparseConfiguration();
+    const KConfigGroup general(config, QStringLiteral("General"));
+    return general.readEntry(QStringLiteral("TerminalService"), QString());
+}
+
+QMap<Component, Application> readCurrentDefaults()
+{
+    QMap<Component, Application> defaults = readCurrentMimeDefaults();
+    const Application terminal = readCurrentTerminalDefault();
+    if (!terminal.isEmpty()) {
+        defaults.insert(Component::Terminal, terminal);
     }
     return defaults;
 }
@@ -232,6 +272,12 @@ int Writer::apply(const QMap<Component, Application> &decisions,
 
         if (application == currentDefaults.value(component)) {
             continue; // No-op: the decision already matches the current default.
+        }
+
+        if (component == Component::Terminal) {
+            writeTerminal(application);
+            ++written;
+            continue;
         }
 
         const QList<QString> mimeKeys = mimeKeysFor(component);

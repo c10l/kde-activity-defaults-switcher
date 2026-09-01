@@ -49,6 +49,12 @@ struct Activity {
     QString name;
 };
 
+// The canonical order of activities: by name (case-insensitive), ties broken
+// by id. KActivities::Consumer::activities() documents no ordering guarantee,
+// so the baseline fallback's "first activity" follows this deterministic
+// order rather than whatever order the consumer happens to return.
+QList<Activity> orderedActivityList(const QList<Activity> &activities);
+
 // A Binding is a single assignment of one application to one component within
 // an activity's profile.
 struct Binding {
@@ -80,9 +86,9 @@ public:
     virtual ~Resolver() = default;
 
     // The baseline activity is the activity named "Default" when present,
-    // otherwise the first activity in the ordered list. Empty when the list
-    // is empty.
-    static std::optional<Activity> selectBaselineActivity(const QList<Activity> &orderedActivities);
+    // otherwise the first activity in the canonical order (see
+    // orderedActivityList). Empty when the list is empty.
+    static std::optional<Activity> selectBaselineActivity(const QList<Activity> &activities);
 
     // Resolution order per component: the current activity's binding, then the
     // baseline activity's binding, then capture the current default

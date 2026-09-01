@@ -1,5 +1,7 @@
 #include "domain.h"
 
+#include <algorithm>
+
 namespace ads {
 
 QList<Component> allComponents()
@@ -93,15 +95,29 @@ QString componentKey(Component component)
     return QString();
 }
 
-std::optional<Activity> Resolver::selectBaselineActivity(const QList<Activity> &orderedActivities)
+QList<Activity> orderedActivityList(const QList<Activity> &activities)
 {
-    for (const Activity &activity : orderedActivities) {
+    QList<Activity> ordered = activities;
+    std::sort(ordered.begin(), ordered.end(), [](const Activity &a, const Activity &b) {
+        const int nameCompare = QString::compare(a.name, b.name, Qt::CaseInsensitive);
+        if (nameCompare != 0) {
+            return nameCompare < 0;
+        }
+        return a.id < b.id;
+    });
+    return ordered;
+}
+
+std::optional<Activity> Resolver::selectBaselineActivity(const QList<Activity> &activities)
+{
+    const QList<Activity> ordered = orderedActivityList(activities);
+    for (const Activity &activity : ordered) {
         if (activity.name == QStringLiteral("Default")) {
             return activity;
         }
     }
-    if (!orderedActivities.isEmpty()) {
-        return orderedActivities.first();
+    if (!ordered.isEmpty()) {
+        return ordered.first();
     }
     return std::nullopt;
 }

@@ -24,6 +24,15 @@ QByteArray mimeappsContent()
     return f.readAll();
 }
 
+QByteArray kdeglobalsContent()
+{
+    QFile f(QStringLiteral("%1/kdeglobals").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
+    if (!f.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return f.readAll();
+}
+
 } // namespace
 
 class WriterTest : public QObject
@@ -37,7 +46,8 @@ private slots:
     void writesWhenDecisionDiffersFromCurrentDefault();
     void skipsNoOpWhenDecisionMatchesCurrentDefault();
     void noOpLeavesExistingConfigUntouched();
-    void skipsTerminalComponent();
+    void writesTerminalToKdeglobals();
+    void terminalNoOpSkipsRewrite();
     void writesEveryMimeComponentToItsPrimaryKey();
     void returnsNumberOfComponentsWritten();
     void skipsEmptyApplication();
@@ -45,6 +55,8 @@ private slots:
     void primaryMimeTypeIsTheComponentChooserCanonicalKey();
     void readCurrentMimeDefaultsReadsPrimaryKeys();
     void readCurrentMimeDefaultsIsEmptyWithoutFile();
+    void readCurrentTerminalDefaultReadsKdeglobals();
+    void readCurrentDefaultsIncludesTerminalAndMime();
 
 private:
     static QString configDir();
@@ -56,7 +68,8 @@ void WriterTest::initTestCase()
     // Install real desktop entries so serviceByStorageId resolves the storage
     // ids exactly as it does in a live session, exercising the writer's
     // primary path rather than its fallback. One entry per component (named
-    // app-<Component>.desktop) plus firefox.desktop for the browser tests.
+    // app-<Component>.desktop) plus firefox.desktop for the browser tests and
+    // konsole for the terminal tests.
     QDir().mkpath(dataDir() + QStringLiteral("/applications"));
     QStringList ids{QStringLiteral("firefox.desktop")};
     for (const Component component : allComponents()) {
@@ -70,6 +83,13 @@ void WriterTest::initTestCase()
         desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n").arg(id).toUtf8());
         desktopFile.close();
     }
+
+    // The terminal's Exec differs from its storage id, so the writer's
+    // TerminalApplication entry can be asserted against the real exec name.
+    QFile konsole(dataDir() + QStringLiteral("/applications/org.kde.konsole.desktop"));
+    QVERIFY(konsole.open(QIODevice::WriteOnly));
+    konsole.write("[Desktop Entry]\nType=Application\nName=Konsole\nExec=konsole\n");
+    konsole.close();
 }
 
 QString WriterTest::configDir()
@@ -91,6 +111,8 @@ void WriterTest::init()
     QFile::remove(configDir() + QStringLiteral("/mimeapps.list"));
     KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::NoGlobals, QStandardPaths::GenericConfigLocation)->reparseConfiguration();
     KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::SimpleConfig)->reparseConfiguration();
+    QFile::remove(configDir() + QStringLiteral("/kdeglobals"));
+    KSharedConfig::openConfig(QStringLiteral("kdeglobals"))->reparseConfiguration();
 }
 
 void WriterTest::writesBrowserDecisionToMimeapps()
@@ -159,8 +181,10 @@ void WriterTest::noOpLeavesExistingConfigUntouched()
     QCOMPARE(mimeappsContent(), before);
 }
 
-void WriterTest::skipsTerminalComponent()
+void WriterTest::writesTerminalToKdeglobals()
 {
+    // The terminal flips via kdeglobals (ADR-0001): TerminalService holds the
+    // storage id and TerminalApplication the executable, never mimeapps.list.
     const Writer writer;
     const QMap<Component, Application> decisions{
         {Component::Terminal, QStringLiteral("org.kde.konsole.desktop")},
@@ -168,16 +192,36 @@ void WriterTest::skipsTerminalComponent()
 
     const int written = writer.apply(decisions, {});
 
-    QCOMPARE(written, 0);
+    QCOMPARE(written, 1);
+    const QByteArray content = kdeglobalsContent();
+    QVERIFY(content.contains("[General]"));
+    QVERIFY(content.contains("TerminalService=org.kde.konsole.desktop"));
+    QVERIFY(content.contains("TerminalApplication=konsole"));
     QVERIFY(!QFile::exists(configDir() + QStringLiteral("/mimeapps.list")));
+}
+
+void WriterTest::terminalNoOpSkipsRewrite()
+{
+    const Writer writer;
+    const QMap<Component, Application> decisions{
+        {Component::Terminal, QStringLiteral("org.kde.konsole.desktop")},
+    };
+    const QMap<Component, Application> currentDefaults{
+        {Component::Terminal, QStringLiteral("org.kde.konsole.desktop")},
+    };
+
+    const int written = writer.apply(decisions, currentDefaults);
+
+    QCOMPARE(written, 0);
+    QVERIFY(!QFile::exists(configDir() + QStringLiteral("/kdeglobals")));
 }
 
 void WriterTest::writesEveryMimeComponentToItsPrimaryKey()
 {
     // Every non-terminal component writes at least its canonical mime key, so
     // all 12 mime components flip per activity (spec: "the full component to
-    // mime map for all 13 components"; the terminal flips via kdeglobals in
-    // ticket 06 and stays untouched here).
+    // mime map for all 13 components"; the terminal flips via kdeglobals and
+    // stays out of mimeapps.list).
     const Writer writer;
     for (const Component component : allComponents()) {
         if (component == Component::Terminal) {
@@ -319,8 +363,8 @@ void WriterTest::mimeKeysMatchSystemSettingsComponentChooser()
                           QStringLiteral("application/x-xz"),
                           QStringLiteral("application/zstd"),
                           QStringLiteral("application/x-lha")}));
-    // The terminal component has no mime keys: it is stored in kdeglobals
-    // (ticket 06), so the writer must never write it to mimeapps.list.
+    // The terminal component has no mime keys: it is stored in kdeglobals,
+    // so the writer must never write it to mimeapps.list.
     QVERIFY(mimeKeysFor(Component::Terminal).isEmpty());
 }
 
@@ -391,6 +435,39 @@ void WriterTest::readCurrentMimeDefaultsIsEmptyWithoutFile()
     QCOMPARE(readCurrentMimeDefaults().size(), 0);
 }
 
+void WriterTest::readCurrentTerminalDefaultReadsKdeglobals()
+{
+    // The current terminal default is the kdeglobals [General] TerminalService
+    // entry (ADR-0001) - the same key the writer writes.
+    QFile file(configDir() + QStringLiteral("/kdeglobals"));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("[General]\nTerminalService=org.kde.konsole.desktop\nTerminalApplication=konsole\n");
+    file.close();
+
+    QCOMPARE(readCurrentTerminalDefault(), QStringLiteral("org.kde.konsole.desktop"));
+}
+
+void WriterTest::readCurrentDefaultsIncludesTerminalAndMime()
+{
+    // The combined read feeds the switcher one defaults map covering both the
+    // mime components (mimeapps.list) and the terminal (kdeglobals).
+    QFile mimeapps(configDir() + QStringLiteral("/mimeapps.list"));
+    QVERIFY(mimeapps.open(QIODevice::WriteOnly));
+    mimeapps.write("[Default Applications]\nx-scheme-handler/http=firefox.desktop;\n");
+    mimeapps.close();
+
+    QFile kdeglobals(configDir() + QStringLiteral("/kdeglobals"));
+    QVERIFY(kdeglobals.open(QIODevice::WriteOnly));
+    kdeglobals.write("[General]\nTerminalService=org.kde.konsole.desktop\nTerminalApplication=konsole\n");
+    kdeglobals.close();
+
+    const auto defaults = readCurrentDefaults();
+
+    QCOMPARE(defaults.size(), 2);
+    QCOMPARE(defaults.value(Component::Browser), QStringLiteral("firefox.desktop"));
+    QCOMPARE(defaults.value(Component::Terminal), QStringLiteral("org.kde.konsole.desktop"));
+}
+
 void WriterTest::returnsNumberOfComponentsWritten()
 {
     const Writer writer;
@@ -401,8 +478,9 @@ void WriterTest::returnsNumberOfComponentsWritten()
 
     const int written = writer.apply(decisions, {});
 
-    QCOMPARE(written, 1);
+    QCOMPARE(written, 2);
     QVERIFY(mimeappsContent().contains("text/html=firefox.desktop;"));
+    QVERIFY(kdeglobalsContent().contains("TerminalService=org.kde.konsole.desktop"));
 }
 
 void WriterTest::skipsEmptyApplication()
