@@ -38,9 +38,13 @@ private slots:
     void skipsNoOpWhenDecisionMatchesCurrentDefault();
     void noOpLeavesExistingConfigUntouched();
     void skipsTerminalComponent();
-    void skipsComponentWithoutKnownMimeKeys();
+    void writesEveryMimeComponentToItsPrimaryKey();
     void returnsNumberOfComponentsWritten();
     void skipsEmptyApplication();
+    void mimeKeysMatchSystemSettingsComponentChooser();
+    void primaryMimeTypeIsTheComponentChooserCanonicalKey();
+    void readCurrentMimeDefaultsReadsPrimaryKeys();
+    void readCurrentMimeDefaultsIsEmptyWithoutFile();
 
 private:
     static QString configDir();
@@ -49,14 +53,23 @@ private:
 
 void WriterTest::initTestCase()
 {
-    // Install a real desktop entry for the browser application so that
-    // serviceByStorageId resolves it exactly as it does in a live session,
-    // exercising the writer's primary path rather than its fallback.
+    // Install real desktop entries so serviceByStorageId resolves the storage
+    // ids exactly as it does in a live session, exercising the writer's
+    // primary path rather than its fallback. One entry per component (named
+    // app-<Component>.desktop) plus firefox.desktop for the browser tests.
     QDir().mkpath(dataDir() + QStringLiteral("/applications"));
-    QFile desktopFile(dataDir() + QStringLiteral("/applications/firefox.desktop"));
-    QVERIFY(desktopFile.open(QIODevice::WriteOnly));
-    desktopFile.write("[Desktop Entry]\nType=Application\nName=Firefox\nExec=firefox\n");
-    desktopFile.close();
+    QStringList ids{QStringLiteral("firefox.desktop")};
+    for (const Component component : allComponents()) {
+        if (component != Component::Terminal) {
+            ids << QStringLiteral("app-%1.desktop").arg(componentKey(component));
+        }
+    }
+    for (const QString &id : ids) {
+        QFile desktopFile(dataDir() + QStringLiteral("/applications/") + id);
+        QVERIFY(desktopFile.open(QIODevice::WriteOnly));
+        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n").arg(id).toUtf8());
+        desktopFile.close();
+    }
 }
 
 QString WriterTest::configDir()
@@ -71,9 +84,12 @@ QString WriterTest::dataDir()
 
 void WriterTest::init()
 {
-    // Each test starts from a clean config directory: the previous test's
-    // mimeapps.list is removed and the shared config cache re-read.
+    // Each test starts from a clean config: the previous test's mimeapps.list
+    // is removed and the shared config cache re-read. The writer writes
+    // through KConfig::NoGlobals (KApplicationTrader) while other code reads
+    // through SimpleConfig, so both shared instances are reparsed.
     QFile::remove(configDir() + QStringLiteral("/mimeapps.list"));
+    KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::NoGlobals, QStandardPaths::GenericConfigLocation)->reparseConfiguration();
     KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::SimpleConfig)->reparseConfiguration();
 }
 
@@ -156,20 +172,223 @@ void WriterTest::skipsTerminalComponent()
     QVERIFY(!QFile::exists(configDir() + QStringLiteral("/mimeapps.list")));
 }
 
-void WriterTest::skipsComponentWithoutKnownMimeKeys()
+void WriterTest::writesEveryMimeComponentToItsPrimaryKey()
 {
-    // Only the browser component has mime keys in this ticket; the full
-    // 13-component map lands in ticket 05. An unknown component must not be
-    // written silently.
+    // Every non-terminal component writes at least its canonical mime key, so
+    // all 12 mime components flip per activity (spec: "the full component to
+    // mime map for all 13 components"; the terminal flips via kdeglobals in
+    // ticket 06 and stays untouched here).
     const Writer writer;
-    const QMap<Component, Application> decisions{
-        {Component::Email, QStringLiteral("org.kde.kmail.desktop")},
-    };
+    for (const Component component : allComponents()) {
+        if (component == Component::Terminal) {
+            continue;
+        }
+        const Application app = QStringLiteral("app-%1.desktop").arg(componentKey(component));
+        const QMap<Component, Application> decisions{{component, app}};
+        const int written = writer.apply(decisions, {});
 
-    const int written = writer.apply(decisions, {});
+        QCOMPARE(written, 1);
+        const QString expectedLine = QStringLiteral("%1=%2;").arg(primaryMimeTypeFor(component), app);
+        QVERIFY2(mimeappsContent().contains(expectedLine.toUtf8()),
+                 qPrintable(QStringLiteral("%1 did not write %2").arg(componentKey(component), expectedLine)));
+    }
+}
 
-    QCOMPARE(written, 0);
-    QVERIFY(!QFile::exists(configDir() + QStringLiteral("/mimeapps.list")));
+void WriterTest::mimeKeysMatchSystemSettingsComponentChooser()
+{
+    // Worked example: each component maps to exactly the mime keys the System
+    // Settings component chooser manages (plasma-workspace,
+    // kcms/componentchooser/components), plus text/html for the browser so
+    // .html files and links both follow the activity (user story 1).
+    QCOMPARE(mimeKeysFor(Component::Browser),
+             (QStringList{QStringLiteral("text/html"),
+                          QStringLiteral("x-scheme-handler/http"),
+                          QStringLiteral("x-scheme-handler/https")}));
+    QCOMPARE(mimeKeysFor(Component::Email),
+             (QStringList{QStringLiteral("x-scheme-handler/mailto")}));
+    QCOMPARE(mimeKeysFor(Component::FileManager),
+             (QStringList{QStringLiteral("inode/directory")}));
+    QCOMPARE(mimeKeysFor(Component::TextEditor),
+             (QStringList{QStringLiteral("text/plain"),
+                          QStringLiteral("text/x-cmake"),
+                          QStringLiteral("text/markdown"),
+                          QStringLiteral("application/x-docbook+xml"),
+                          QStringLiteral("application/json"),
+                          QStringLiteral("application/x-yaml")}));
+    QCOMPARE(mimeKeysFor(Component::Calendar),
+             (QStringList{QStringLiteral("text/calendar")}));
+    QCOMPARE(mimeKeysFor(Component::Geo),
+             (QStringList{QStringLiteral("x-scheme-handler/geo")}));
+    QCOMPARE(mimeKeysFor(Component::ImageViewer),
+             (QStringList{QStringLiteral("image/png"),
+                          QStringLiteral("image/jpeg"),
+                          QStringLiteral("image/webp"),
+                          QStringLiteral("image/avif"),
+                          QStringLiteral("image/heif"),
+                          QStringLiteral("image/bmp"),
+                          QStringLiteral("image/x-icns")}));
+    QCOMPARE(mimeKeysFor(Component::MusicPlayer),
+             (QStringList{QStringLiteral("audio/aac"),
+                          QStringLiteral("audio/mp4"),
+                          QStringLiteral("audio/mpeg"),
+                          QStringLiteral("audio/mpegurl"),
+                          QStringLiteral("audio/ogg"),
+                          QStringLiteral("audio/vnd.rn-realaudio"),
+                          QStringLiteral("audio/vorbis"),
+                          QStringLiteral("audio/x-flac"),
+                          QStringLiteral("audio/x-mp3"),
+                          QStringLiteral("audio/x-mpegurl"),
+                          QStringLiteral("audio/x-ms-wma"),
+                          QStringLiteral("audio/x-musepack"),
+                          QStringLiteral("audio/x-oggflac"),
+                          QStringLiteral("audio/x-pn-realaudio"),
+                          QStringLiteral("audio/x-scpls"),
+                          QStringLiteral("audio/x-speex"),
+                          QStringLiteral("audio/x-vorbis"),
+                          QStringLiteral("audio/x-vorbis+ogg"),
+                          QStringLiteral("audio/x-wav")}));
+    QCOMPARE(mimeKeysFor(Component::PdfViewer),
+             (QStringList{QStringLiteral("application/pdf")}));
+    QCOMPARE(mimeKeysFor(Component::Tel),
+             (QStringList{QStringLiteral("x-scheme-handler/tel")}));
+    QCOMPARE(mimeKeysFor(Component::VideoPlayer),
+             (QStringList{QStringLiteral("video/3gp"),
+                          QStringLiteral("video/3gpp"),
+                          QStringLiteral("video/3gpp2"),
+                          QStringLiteral("video/avi"),
+                          QStringLiteral("video/divx"),
+                          QStringLiteral("video/dv"),
+                          QStringLiteral("video/fli"),
+                          QStringLiteral("video/flv"),
+                          QStringLiteral("video/mp2t"),
+                          QStringLiteral("video/mp4"),
+                          QStringLiteral("video/mp4v-es"),
+                          QStringLiteral("video/mpeg"),
+                          QStringLiteral("video/msvideo"),
+                          QStringLiteral("video/ogg"),
+                          QStringLiteral("video/quicktime"),
+                          QStringLiteral("video/vnd.divx"),
+                          QStringLiteral("video/vnd.mpegurl"),
+                          QStringLiteral("video/vnd.rn-realvideo"),
+                          QStringLiteral("video/webm"),
+                          QStringLiteral("video/x-avi"),
+                          QStringLiteral("video/x-flv"),
+                          QStringLiteral("video/x-m4v"),
+                          QStringLiteral("video/x-matroska"),
+                          QStringLiteral("video/x-mpeg2"),
+                          QStringLiteral("video/x-ms-asf"),
+                          QStringLiteral("video/x-msvideo"),
+                          QStringLiteral("video/x-ms-wmv"),
+                          QStringLiteral("video/x-ms-wmx"),
+                          QStringLiteral("video/x-ogm"),
+                          QStringLiteral("video/x-ogm+ogg"),
+                          QStringLiteral("video/x-theora"),
+                          QStringLiteral("video/x-theora+ogg"),
+                          QStringLiteral("application/x-matroska")}));
+    QCOMPARE(mimeKeysFor(Component::ArchiveManager),
+             (QStringList{QStringLiteral("application/x-tar"),
+                          QStringLiteral("application/x-compressed-tar"),
+                          QStringLiteral("application/x-bzip-compressed-tar"),
+                          QStringLiteral("application/x-tarz"),
+                          QStringLiteral("application/x-xz-compressed-tar"),
+                          QStringLiteral("application/x-lzma-compressed-tar"),
+                          QStringLiteral("application/x-lzip-compressed-tar"),
+                          QStringLiteral("application/x-tzo"),
+                          QStringLiteral("application/x-lrzip-compressed-tar"),
+                          QStringLiteral("application/x-lz4-compressed-tar"),
+                          QStringLiteral("application/x-zstd-compressed-tar"),
+                          QStringLiteral("application/x-cd-image"),
+                          QStringLiteral("application/x-bcpio"),
+                          QStringLiteral("application/x-cpio"),
+                          QStringLiteral("application/x-cpio-compressed"),
+                          QStringLiteral("application/x-sv4cpio"),
+                          QStringLiteral("application/x-sv4crc"),
+                          QStringLiteral("application/x-source-rpm"),
+                          QStringLiteral("application/vnd.ms-cab-compressed"),
+                          QStringLiteral("application/x-xar"),
+                          QStringLiteral("application/x-iso9660-appimage"),
+                          QStringLiteral("application/x-archive"),
+                          QStringLiteral("application/vnd.rar"),
+                          QStringLiteral("application/x-rar"),
+                          QStringLiteral("application/x-7z-compressed"),
+                          QStringLiteral("application/zip"),
+                          QStringLiteral("application/x-compress"),
+                          QStringLiteral("application/gzip"),
+                          QStringLiteral("application/x-bzip"),
+                          QStringLiteral("application/x-lzma"),
+                          QStringLiteral("application/x-xz"),
+                          QStringLiteral("application/zstd"),
+                          QStringLiteral("application/x-lha")}));
+    // The terminal component has no mime keys: it is stored in kdeglobals
+    // (ticket 06), so the writer must never write it to mimeapps.list.
+    QVERIFY(mimeKeysFor(Component::Terminal).isEmpty());
+}
+
+void WriterTest::primaryMimeTypeIsTheComponentChooserCanonicalKey()
+{
+    // The "current default" of a component is read through the same canonical
+    // mime type the System Settings component chooser uses to load it.
+    QCOMPARE(primaryMimeTypeFor(Component::Browser), QStringLiteral("x-scheme-handler/http"));
+    QCOMPARE(primaryMimeTypeFor(Component::Email), QStringLiteral("x-scheme-handler/mailto"));
+    QCOMPARE(primaryMimeTypeFor(Component::FileManager), QStringLiteral("inode/directory"));
+    QCOMPARE(primaryMimeTypeFor(Component::TextEditor), QStringLiteral("text/plain"));
+    QCOMPARE(primaryMimeTypeFor(Component::Calendar), QStringLiteral("text/calendar"));
+    QCOMPARE(primaryMimeTypeFor(Component::Geo), QStringLiteral("x-scheme-handler/geo"));
+    QCOMPARE(primaryMimeTypeFor(Component::ImageViewer), QStringLiteral("image/png"));
+    QCOMPARE(primaryMimeTypeFor(Component::MusicPlayer), QStringLiteral("audio/mpeg"));
+    QCOMPARE(primaryMimeTypeFor(Component::PdfViewer), QStringLiteral("application/pdf"));
+    QCOMPARE(primaryMimeTypeFor(Component::Tel), QStringLiteral("x-scheme-handler/tel"));
+    QCOMPARE(primaryMimeTypeFor(Component::VideoPlayer), QStringLiteral("video/mp4"));
+    QCOMPARE(primaryMimeTypeFor(Component::ArchiveManager), QStringLiteral("application/zip"));
+}
+
+void WriterTest::readCurrentMimeDefaultsReadsPrimaryKeys()
+{
+    // Simulate what the System Settings component chooser writes to
+    // mimeapps.list: one preferred application per component under
+    // [Default Applications]. The secondary text/x-cmake entry must not change
+    // the TextEditor default (only the canonical key is consulted).
+    QFile file(configDir() + QStringLiteral("/mimeapps.list"));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("[Default Applications]\n"
+               "x-scheme-handler/http=firefox.desktop;\n"
+               "x-scheme-handler/https=firefox.desktop;\n"
+               "text/html=firefox.desktop;\n"
+               "x-scheme-handler/mailto=org.kde.kmail2.desktop;\n"
+               "inode/directory=org.kde.dolphin.desktop;\n"
+               "text/plain=org.kde.kate.desktop;\n"
+               "text/x-cmake=some-other-editor.desktop;\n"
+               "text/calendar=org.kde.merkuro.desktop;\n"
+               "x-scheme-handler/geo=marble_geo.desktop;\n"
+               "image/png=org.kde.gwenview.desktop;\n"
+               "audio/mpeg=org.kde.elisa.desktop;\n"
+               "application/pdf=okularApplication_pdf.desktop;\n"
+               "x-scheme-handler/tel=org.kde.kdeconnect.handler.desktop;\n"
+               "video/mp4=org.kde.haruna.desktop;\n"
+               "application/zip=org.kde.ark.desktop;\n");
+    file.close();
+
+    const auto defaults = readCurrentMimeDefaults();
+
+    QCOMPARE(defaults.size(), 12);
+    QCOMPARE(defaults.value(Component::Browser), QStringLiteral("firefox.desktop"));
+    QCOMPARE(defaults.value(Component::Email), QStringLiteral("org.kde.kmail2.desktop"));
+    QCOMPARE(defaults.value(Component::FileManager), QStringLiteral("org.kde.dolphin.desktop"));
+    QCOMPARE(defaults.value(Component::TextEditor), QStringLiteral("org.kde.kate.desktop"));
+    QCOMPARE(defaults.value(Component::Calendar), QStringLiteral("org.kde.merkuro.desktop"));
+    QCOMPARE(defaults.value(Component::Geo), QStringLiteral("marble_geo.desktop"));
+    QCOMPARE(defaults.value(Component::ImageViewer), QStringLiteral("org.kde.gwenview.desktop"));
+    QCOMPARE(defaults.value(Component::MusicPlayer), QStringLiteral("org.kde.elisa.desktop"));
+    QCOMPARE(defaults.value(Component::PdfViewer), QStringLiteral("okularApplication_pdf.desktop"));
+    QCOMPARE(defaults.value(Component::Tel), QStringLiteral("org.kde.kdeconnect.handler.desktop"));
+    QCOMPARE(defaults.value(Component::VideoPlayer), QStringLiteral("org.kde.haruna.desktop"));
+    QCOMPARE(defaults.value(Component::ArchiveManager), QStringLiteral("org.kde.ark.desktop"));
+    QVERIFY(!defaults.contains(Component::Terminal));
+}
+
+void WriterTest::readCurrentMimeDefaultsIsEmptyWithoutFile()
+{
+    QCOMPARE(readCurrentMimeDefaults().size(), 0);
 }
 
 void WriterTest::returnsNumberOfComponentsWritten()

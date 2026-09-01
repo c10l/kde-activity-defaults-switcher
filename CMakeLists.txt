@@ -25,6 +25,12 @@ add_library(ads-switcher STATIC src/switcher.cpp)
 target_include_directories(ads-switcher PUBLIC src)
 target_link_libraries(ads-switcher PUBLIC ads-domain ads-writer)
 
+add_library(ads-store STATIC src/store.cpp)
+target_include_directories(ads-store PUBLIC src)
+target_link_libraries(ads-store PUBLIC ads-domain KF6::ConfigCore)
+
+target_link_libraries(ads-switcher PUBLIC ads-store)
+
 enable_testing()
 
 add_executable(tst_resolver tests/tst_resolver.cpp)
@@ -38,6 +44,10 @@ add_test(NAME writer COMMAND tst_writer)
 add_executable(tst_switcher tests/tst_switcher.cpp)
 target_link_libraries(tst_switcher PRIVATE ads-switcher ads-writer Qt6::Test)
 add_test(NAME switcher COMMAND tst_switcher)
+
+add_executable(tst_store tests/tst_store.cpp)
+target_link_libraries(tst_store PRIVATE ads-store Qt6::Test)
+add_test(NAME store COMMAND tst_store)
 
 # --- kded6 module (ticket 04) ---
 # The KDEDModule base class and the KActivities consumer come from the

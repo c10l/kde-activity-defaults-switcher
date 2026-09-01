@@ -60,6 +60,39 @@ bool Profile::isEmpty() const
     return m_bindings.isEmpty();
 }
 
+QString componentKey(Component component)
+{
+    switch (component) {
+    case Component::Browser:
+        return QStringLiteral("Browser");
+    case Component::Email:
+        return QStringLiteral("Email");
+    case Component::FileManager:
+        return QStringLiteral("FileManager");
+    case Component::TextEditor:
+        return QStringLiteral("TextEditor");
+    case Component::Calendar:
+        return QStringLiteral("Calendar");
+    case Component::Geo:
+        return QStringLiteral("Geo");
+    case Component::ImageViewer:
+        return QStringLiteral("ImageViewer");
+    case Component::MusicPlayer:
+        return QStringLiteral("MusicPlayer");
+    case Component::PdfViewer:
+        return QStringLiteral("PdfViewer");
+    case Component::Tel:
+        return QStringLiteral("Tel");
+    case Component::VideoPlayer:
+        return QStringLiteral("VideoPlayer");
+    case Component::ArchiveManager:
+        return QStringLiteral("ArchiveManager");
+    case Component::Terminal:
+        return QStringLiteral("Terminal");
+    }
+    return QString();
+}
+
 std::optional<Activity> Resolver::selectBaselineActivity(const QList<Activity> &orderedActivities)
 {
     for (const Activity &activity : orderedActivities) {

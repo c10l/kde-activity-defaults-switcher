@@ -26,6 +26,7 @@ private slots:
     void componentWithNoDecisionIsAbsent();
     void componentWithoutDecisionAbsentFromNonEmptyResult();
     void profileExposesBindings();
+    void componentKeyIsStableAndUnique();
 };
 
 void ResolverTest::baselineIsDefaultWhenPresent()
@@ -250,6 +251,37 @@ void ResolverTest::componentWithoutDecisionAbsentFromNonEmptyResult()
         if (component != Component::Browser) {
             QVERIFY(!decisions.contains(component));
         }
+    }
+}
+
+void ResolverTest::componentKeyIsStableAndUnique()
+{
+    // The profile store writes one config group per component; the group name
+    // is the component's key, so keys must be stable (spec: "one group per
+    // component") and must never collide.
+    const QMap<Component, QString> expected{
+        {Component::Browser, QStringLiteral("Browser")},
+        {Component::Email, QStringLiteral("Email")},
+        {Component::FileManager, QStringLiteral("FileManager")},
+        {Component::TextEditor, QStringLiteral("TextEditor")},
+        {Component::Calendar, QStringLiteral("Calendar")},
+        {Component::Geo, QStringLiteral("Geo")},
+        {Component::ImageViewer, QStringLiteral("ImageViewer")},
+        {Component::MusicPlayer, QStringLiteral("MusicPlayer")},
+        {Component::PdfViewer, QStringLiteral("PdfViewer")},
+        {Component::Tel, QStringLiteral("Tel")},
+        {Component::VideoPlayer, QStringLiteral("VideoPlayer")},
+        {Component::ArchiveManager, QStringLiteral("ArchiveManager")},
+        {Component::Terminal, QStringLiteral("Terminal")},
+    };
+
+    QSet<QString> seen;
+    for (const Component component : allComponents()) {
+        const QString key = componentKey(component);
+        QCOMPARE(key, expected.value(component));
+        QVERIFY(!key.isEmpty());
+        QVERIFY(!seen.contains(key)); // unique across components
+        seen.insert(key);
     }
 }
 

@@ -37,6 +37,10 @@ enum class Component {
 // Every component, in a stable order.
 QList<Component> allComponents();
 
+// The stable config key for a component (used as the profile store's group
+// name). Keys are unique and never change once written.
+QString componentKey(Component component);
+
 // An Activity is the workspace unit this tool keys profiles by. KDE
 // identifies activities by UUID; the name is user-renamable, so profiles are
 // keyed by id and the name is carried alongside for the baseline selection.
