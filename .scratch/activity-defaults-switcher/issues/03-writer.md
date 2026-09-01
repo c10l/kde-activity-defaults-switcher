@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 (Resolver + domain model).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `apply()` writes each component's application to the XDG mime config.
-- [ ] Skips no-ops: a component whose decision already equals the current default is not rewritten.
-- [ ] Tested against a temporary config directory, not the live system.
-- [ ] No D-Bus/activity logic; only the write path.
+- [x] `apply()` writes each component's application to the XDG mime config.
+- [x] Skips no-ops: a component whose decision already equals the current default is not rewritten.
+- [x] Tested against a temporary config directory, not the live system.
+- [x] No D-Bus/activity logic; only the write path.
