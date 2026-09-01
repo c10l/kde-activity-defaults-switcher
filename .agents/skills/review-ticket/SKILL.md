@@ -36,9 +36,15 @@ Also check:
 ## 4. Verdict
 
 - **Approve** — every criterion met. Set `Status: done`, tick the boxes, and commit that change.
-- **Approve with fixes** — only minor, non-blocking findings. Do not mark done. Report the findings; if a finding belongs in a later ticket, add it there, ordered to match the dependency chain.
+- **Approve with fixes** — only minor, non-blocking findings. Do not mark done.
 - **Send back** — a criterion is unmet or something is blocking. Report exactly what's missing. Do not mark done.
+
+**Every finding must land in the ticket backlog — never only in the chat report.** For each finding, blocking or not:
+
+- If it belongs to an existing ticket, append it there (a `Note from review of NN:` line, or a new checkbox when it is a concrete acceptance criterion).
+- Otherwise create a new ticket under `issues/` numbered to preserve dependency order, with its own `Blocked by` list and acceptance criteria.
+- Commit the ticket edits alongside any Status/checkbox change, so the finding survives past the session.
 
 ## 5. Report
 
-Report concisely: the verdict, what passed, findings (blocking vs non-blocking, in order), and any ticket changes you made.
+Report concisely: the verdict, what passed, findings (blocking vs non-blocking, in dependency order), and the ticket changes you made — for each finding, which existing ticket it was appended to, or which new ticket it became.
