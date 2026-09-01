@@ -76,7 +76,7 @@ std::optional<Activity> Resolver::selectBaselineActivity(const QList<Activity> &
 QMap<Component, Application> Resolver::resolve(
     const Activity &currentActivity,
     const std::optional<Activity> &baselineActivity,
-    const QMap<QString, Profile> &profiles,
+    const QMap<ActivityId, Profile> &profiles,
     const QMap<Component, Application> &currentDefaults) const
 {
     const Profile currentProfile = profiles.value(currentActivity.id);

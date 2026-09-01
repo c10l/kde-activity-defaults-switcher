@@ -12,6 +12,10 @@ namespace ads {
 // .desktop file (KDE service storageId), e.g. "org.kde.falkon.desktop".
 using Application = QString;
 
+// Activities are keyed by their KDE UUID. The alias makes "keyed by id"
+// explicit in the type system.
+using ActivityId = QString;
+
 // A Component is a category of default application the user chooses in
 // System Settings.
 enum class Component {
@@ -37,14 +41,9 @@ QList<Component> allComponents();
 // identifies activities by UUID; the name is user-renamable, so profiles are
 // keyed by id and the name is carried alongside for the baseline selection.
 struct Activity {
-    QString id;
+    ActivityId id;
     QString name;
 };
-
-inline bool operator==(const Activity &a, const Activity &b)
-{
-    return a.id == b.id;
-}
 
 // A Binding is a single assignment of one application to one component within
 // an activity's profile.
@@ -74,6 +73,8 @@ private:
 class Resolver
 {
 public:
+    virtual ~Resolver() = default;
+
     // The baseline activity is the activity named "Default" when present,
     // otherwise the first activity in the ordered list. Empty when the list
     // is empty.
@@ -83,10 +84,10 @@ public:
     // baseline activity's binding, then capture the current default
     // application. A component with none of those is absent from the result.
     // `profiles` is keyed by activity id.
-    QMap<Component, Application> resolve(
+    virtual QMap<Component, Application> resolve(
         const Activity &currentActivity,
         const std::optional<Activity> &baselineActivity,
-        const QMap<QString, Profile> &profiles,
+        const QMap<ActivityId, Profile> &profiles,
         const QMap<Component, Application> &currentDefaults) const;
 };
 

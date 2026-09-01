@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Name": "Activity Defaults Switcher",
+        "Description": "Switches the system default applications to match the current KDE Activity",
+        "ServiceTypes": [
+            "KDEDModule"
+        ],
+        "Version": "0.1"
+    },
+    "X-KDE-Kded-autoload": true,
+    "X-KDE-Kded-load-on-demand": false
+}

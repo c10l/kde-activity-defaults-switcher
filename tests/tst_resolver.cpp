@@ -245,8 +245,12 @@ void ResolverTest::componentWithoutDecisionAbsentFromNonEmptyResult()
         currentDefaults);
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("chromium.desktop"));
-    QVERIFY(!decisions.contains(Component::Email));
-    QVERIFY(!decisions.contains(Component::Terminal));
+    QCOMPARE(decisions.size(), 1);
+    for (const Component component : allComponents()) {
+        if (component != Component::Browser) {
+            QVERIFY(!decisions.contains(component));
+        }
+    }
 }
 
 void ResolverTest::profileExposesBindings()
