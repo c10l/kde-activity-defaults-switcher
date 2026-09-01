@@ -6,10 +6,10 @@ Decision to implement: `Activity` carries both id (UUID) and name; profiles are 
 
 **Blocked by:** 01 (Resolver + domain model).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Activity type carries id and name.
-- [ ] Profiles keyed by activity id.
-- [ ] `selectBaselineActivity` still matches on name and returns the full Activity (id + name).
-- [ ] Resolver and its tests updated to the new shape; tests pass.
-- [ ] While updating the tests, add the missing mixed-case assertion: components without a decision are absent from a non-empty result.
+- [x] Activity type carries id and name.
+- [x] Profiles keyed by activity id.
+- [x] `selectBaselineActivity` still matches on name and returns the full Activity (id + name).
+- [x] Resolver and its tests updated to the new shape; tests pass.
+- [x] While updating the tests, add the missing mixed-case assertion: components without a decision are absent from a non-empty result.
