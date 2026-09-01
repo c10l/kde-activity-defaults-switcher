@@ -1,8 +1,8 @@
-# 02: kded6 module — browser tracer bullet
+# 04: kded6 module — browser tracer bullet
 
-**What to build:** An auto-loaded kded6 module that wires activity changes through the resolver and applies the result for the browser component only, writing via `KApplicationTrader`. Proves the full kded → resolve → apply path end to end before scaling to all components.
+**What to build:** An auto-loaded kded6 module that wires activity changes through the resolver and applies the result for the browser component only, using the writer (03). Proves the full kded → resolve → apply path end to end before scaling to all components.
 
-**Blocked by:** 01 (Resolver + domain model).
+**Blocked by:** 01 (Resolver + domain model), 02 (Activity identity), 03 (Writer).
 
 **Status:** ready-for-agent
 

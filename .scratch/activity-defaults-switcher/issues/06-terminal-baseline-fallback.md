@@ -1,8 +1,8 @@
-# 04: Terminal component + baseline fallback
+# 06: Terminal component + baseline fallback
 
 **What to build:** The terminal component (written to `kdeglobals` `TerminalService`/`TerminalApplication` rather than mimeapps) and the baseline fallback: when no activity named "Default" exists, the first activity in the ordered list supplies fallbacks.
 
-**Blocked by:** 03 (All components + profile store + capture).
+**Blocked by:** 05 (All components + profile store + capture).
 
 **Status:** ready-for-agent
 

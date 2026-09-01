@@ -45,16 +45,22 @@ A good test asserts behaviour through the public interface, never implementation
 
 ## 5. Scope discipline
 
-- Satisfy the ticket's acceptance criteria and nothing else. Later tickets' work is out of bounds (e.g. no KCM work before ticket 05).
+- Satisfy the ticket's acceptance criteria and nothing else. Later tickets' work is out of bounds (e.g. no KCM work before ticket 07).
 - If you hit a decision or bug that belongs to another ticket, record it in your report; do not fix it silently and do not expand the ticket.
 
 ## 6. Verify, then report
 
 - Tests green (`ctest` or the project's test command).
-- Tickets 02+ include an end-to-end check (e.g. switch activity → the default flips). Do it.
+- Daemon tickets (04+) include an end-to-end check (e.g. switch activity → the default flips). Do it.
 
 Report concisely when done:
 
 - What you built, as behaviour (not a diff).
 - Which tests you added and which acceptance criteria they pin.
 - Any deviation from the spec, and notes for later tickets.
+
+## 7. Commit and hand over
+
+- Commit your changes (source, tests, and doc updates) before reporting; build artifacts belong in `.gitignore`.
+- Do not edit the ticket's Status or tick its acceptance criteria — that is the reviewer's call, after review.
+- Report per section 6 and stop; do not start another ticket.
