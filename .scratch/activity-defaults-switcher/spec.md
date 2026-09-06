@@ -49,7 +49,7 @@ An always-on KDE Plasma 6 daemon (a kded6 module) that, whenever the current Act
 
 ## Out of Scope
 
-- The System Settings **KCM** (view/edit/reset profiles) — see ticket 07, pending a future grill session.
+- The System Settings **KCM** (view/edit/reset profiles) — designed and tracked in ticket 07; its design lives there, not in this spec.
 - Disambiguating Activities across multiple screens beyond "the focused Activity".
 - Per-mime-type overrides below the component level (a component always maps to its full mime list).
 - Distribution packaging (deb, etc.).
