@@ -111,6 +111,7 @@ ci:
 	$(PODMAN) run --rm -v "$$(pwd):/src:ro" debian:forky bash -c ' \
 		apt-get update -qq && \
 		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+			ca-certificates \
 			build-essential cmake git extra-cmake-modules qt6-base-dev \
 			libkf6service-dev libkf6config-dev libkf6coreaddons-dev \
 			libkf6dbusaddons-dev libplasmaactivities-dev kded6-dev \

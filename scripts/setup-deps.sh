@@ -15,6 +15,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 pkgs=(
+    ca-certificates
     build-essential
     cmake
     git
