@@ -144,6 +144,21 @@ public:
     mutable QMap<ActivityId, Profile> saved;
 };
 
+// Writes a throwaway mimeapps.list whose browser (x-scheme-handler/http) points
+// at the given storage id - the exact shape the System Settings component
+// chooser and the writer use, so readCurrentDefaults sees a real browser default.
+static void writeBrowserDefault(const QString &configDir, const QString &storageId)
+{
+    QFile f(configDir + QStringLiteral("/mimeapps.list"));
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return;
+    }
+    const QByteArray body = "[Default Applications]\n"
+                            "x-scheme-handler/http=" + storageId.toUtf8() + ";\n";
+    f.write(body);
+    f.close();
+}
+
 } // namespace
 
 class ModuleTest : public QObject
@@ -159,6 +174,7 @@ private slots:
     void alreadyRunningAtStartupRefreshesOnce();
     void notRunningDoesNotResolve();
     void activityChangeResolvesWithCorrectBaseline();
+    void resolverReceivesLoadedProfilesAndCurrentDefaults();
     void mimeappsChangeCapturesBindingIntoCurrentActivity();
     void recreatedFileIsReWatchedAndCaptureRuns();
     void rapidChangesCoalesceIntoSingleCapture();
@@ -371,18 +387,42 @@ void ModuleTest::activityChangeResolvesWithCorrectBaseline()
     QCOMPARE(resolverPtr->lastCurrent.id, QStringLiteral("default-id"));
 }
 
-// Writes a throwaway mimeapps.list whose browser (x-scheme-handler/http) points
-// at the given storage id - the exact shape the System Settings component
-// chooser and the writer use, so the module's readCurrentDefaults sees a real
-// default for the Browser component.
-static void writeBrowserDefault(const QString &configDir, const QString &storageId)
+// The module feeds the resolver the profiles loaded from the store and the
+// current defaults it read, alongside the current/baseline it derived (the
+// "profiles/defaults" half of criterion 2). Seed a real (throwaway) store and a
+// real mimeapps.list, then watch both flow into the resolver.
+void ModuleTest::resolverReceivesLoadedProfilesAndCurrentDefaults()
 {
-    QFile f(configDir + QStringLiteral("/mimeapps.list"));
-    QVERIFY2(f.open(QIODevice::WriteOnly | QIODevice::Truncate), qPrintable(f.errorString()));
-    const QByteArray body = "[Default Applications]\n"
-                            "x-scheme-handler/http=" + storageId.toUtf8() + ";\n";
-    f.write(body);
-    f.close();
+    // Seed the profile store the module loads from: Work binds the browser to
+    // chromium.
+    Profile work;
+    work.setBinding(Component::Browser, QStringLiteral("chromium.desktop"));
+    ProfileStore(configDir() + QStringLiteral("/activity-defaults-switcherrc"))
+        .save({{QStringLiteral("work-id"), work}});
+    // Seed a current default for the browser that differs from the binding, so
+    // both a profile binding and a current default are visible downstream.
+    writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
+
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({Activity{QStringLiteral("work-id"), QStringLiteral("Work")}});
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr,
+                                          std::move(backend),
+                                          std::move(resolver),
+                                          std::make_unique<FakeWriter>(),
+                                          std::make_unique<FakeStore>());
+
+    // Startup (already Running) refresh passed the loaded profile and the read
+    // current default into the resolver alongside current/baseline.
+    QVERIFY(resolverPtr->calls >= 1);
+    QCOMPARE(resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+             QStringLiteral("chromium.desktop"));
+    QCOMPARE(resolverPtr->lastDefaults.value(Component::Browser),
+             QStringLiteral("firefox.desktop"));
 }
 
 // Criterion 3: a change to a watched config file (a System Settings edit) is
@@ -429,8 +469,8 @@ void ModuleTest::recreatedFileIsReWatchedAndCaptureRuns()
     auto store = std::make_unique<FakeStore>();
     auto *storePtr = store.get();
 
-    // Pre-create the file so the module starts watching it. Startup refresh sees
-    // chromium as the current default.
+    // Pre-create the file so the module starts watching it at construction.
+    // Startup refresh sees chromium as the current default.
     writeBrowserDefault(configDir(), QStringLiteral("chromium.desktop"));
 
     ActivityDefaultsSwitcherModule module(nullptr,
@@ -439,10 +479,16 @@ void ModuleTest::recreatedFileIsReWatchedAndCaptureRuns()
                                           std::make_unique<FakeWriter>(),
                                           std::move(store));
 
-    // The user's file gets deleted and recreated pointing elsewhere (as if the
-    // component chooser rewrote it). The module must re-watch and capture.
+    // The file is genuinely removed (the watcher path is dropped), then
+    // recreated pointing elsewhere - as when the component chooser rewrites it as
+    // a brand new file. This must fire directoryChanged -> the module re-adds the
+    // (now present, no-longer-watched) file to the watcher and captures.
+    QFile file(configDir() + QStringLiteral("/mimeapps.list"));
+    QVERIFY(file.remove());
+    QTest::qWait(300); // let the removal settle (drops the watched path)
+
     writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
-    QTest::qWait(350);
+    QTest::qWait(350); // let re-add + coalescing + capture run
 
     QVERIFY(storePtr->saves >= 1);
     QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
