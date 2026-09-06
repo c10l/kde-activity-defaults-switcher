@@ -34,7 +34,7 @@ An always-on KDE Plasma 6 daemon (a kded6 module) that, whenever the current Act
 - **Components**: the 13 component-chooser categories — browser, email, filemanager, texteditor, calendar, geo, imageviewer, musicplayer, pdfviewer, tel, videoplayer, archivemanager, terminal — each mapped to its mime keys. Terminal is the exception: stored in kdeglobals, not mimeapps.
 - **Writing**: mime components via `KApplicationTrader::setPreferredService`; terminal via `kdeglobals` `TerminalService`/`TerminalApplication`. (ADR-0001.)
 - **Profile store**: a KConfig file, one group per component, activity id as key, storageId as value.
-- **Change detection**: `KActivities::Consumer` for activity changes; `KConfigWatcher` on mimeapps.list and kdeglobals for System Settings edits.
+- **Change detection**: `KActivities::Consumer` for activity changes; `QFileSystemWatcher` on mimeapps.list and kdeglobals for System Settings edits.
 - **Language/build**: C++/Qt6/KF6, CMake + ECM.
 - Use the repository glossary vocabulary in all code and tests.
 

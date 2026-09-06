@@ -4,23 +4,43 @@
 #include <QFile>
 #include <QStandardPaths>
 
+#include "kactivities_backend.h"
 #include "writer.h"
 
 namespace ads {
 
+// kded6 plugin constructor: runs with the real KActivities-backed backend.
 ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(QObject *parent, const QVariantList &args)
     : KDEDModule(parent)
-    , m_consumer(new KActivities::Consumer(this))
     , m_switcher(std::make_unique<Resolver>(), std::make_unique<Writer>(), std::make_unique<ProfileStore>())
 {
     Q_UNUSED(args);
+    init(std::make_unique<KActivitiesActivityBackend>(this));
+}
+
+// Testable shell constructor: an injected backend + resolver/writer/store.
+ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(
+    QObject *parent,
+    std::unique_ptr<ActivityBackend> backend,
+    std::unique_ptr<Resolver> resolver,
+    std::unique_ptr<Writer> writer,
+    std::unique_ptr<ProfileStore> store)
+    : KDEDModule(parent)
+    , m_switcher(std::move(resolver), std::move(writer), std::move(store))
+{
+    init(std::move(backend));
+}
+
+void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backend)
+{
+    m_backend = std::move(backend);
 
     // Watch mimeapps.list and kdeglobals (and their directory, to notice a
     // file's creation) so System Settings edits reach the switcher's capture
     // path. A QFileSystemWatcher is used instead of KConfigWatcher because
     // KConfigWatcher only fires for writes done with the KConfig Notify flag,
-    // and both the System Settings component chooser and our writer write
-    // these files without it (KApplicationTrader::setPreferredService and the
+    // and both the System Settings component chooser and our writer write these
+    // files without it (KApplicationTrader::setPreferredService and the
     // kdeglobals write) - so it would never observe a real edit.
     const QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     m_mimeappsPath = configDir + QStringLiteral("/mimeapps.list");
@@ -30,9 +50,10 @@ ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(QObject *parent, 
     }
     ensureConfigWatched(m_mimeappsPath);
     ensureConfigWatched(m_kdeglobalsPath);
-    // File-change events can arrive while a config file is still being
-    // written (KConfig truncates and rewrites it), so edits are coalesced and
-    // only processed once the file has settled.
+
+    // File-change events can arrive while a config file is still being written
+    // (KConfig truncates and rewrites it), so edits are coalesced and only
+    // processed once the file has settled.
     m_editTimer.setSingleShot(true);
     m_editTimer.setInterval(100);
     connect(&m_editTimer, &QTimer::timeout, this, [this]() {
@@ -58,57 +79,38 @@ ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(QObject *parent, 
         }
     });
 
-    connect(m_consumer, &KActivities::Consumer::currentActivityChanged, this, [this](const QString &) {
+    connect(m_backend.get(), &ActivityBackend::currentActivityChanged, this, [this](const QString &) {
         refresh();
     });
-    connect(m_consumer, &KActivities::Consumer::activitiesChanged, this, [this](const QStringList &) {
+    connect(m_backend.get(), &ActivityBackend::activitiesChanged, this, [this]() {
         refresh();
     });
-    connect(m_consumer, &KActivities::Consumer::serviceStatusChanged, this, [this](KActivities::Consumer::ServiceStatus status) {
-        if (status == KActivities::Consumer::Running) {
+    connect(m_backend.get(), &ActivityBackend::runningChanged, this, [this](bool running) {
+        if (running) {
             refresh();
         }
     });
 
     // Apply once at startup, in case the service is already running.
-    if (m_consumer->serviceStatus() == KActivities::Consumer::Running) {
+    if (isRunning()) {
         refresh();
     }
 }
 
-QString ActivityDefaultsSwitcherModule::activityName(const QString &id)
+bool ActivityDefaultsSwitcherModule::isRunning() const
 {
-    KActivities::Info *info = m_info.value(id);
-    if (!info) {
-        info = new KActivities::Info(id, this);
-        m_info.insert(id, info);
-    }
-    return info->name();
-}
-
-QList<Activity> ActivityDefaultsSwitcherModule::allActivities()
-{
-    // The consumer's list has no ordering guarantee; the resolver imposes the
-    // canonical order itself (orderedActivityList), so this is just the raw
-    // set of activities.
-    QList<Activity> activities;
-    const QStringList ids = m_consumer->activities();
-    activities.reserve(ids.size());
-    for (const QString &id : ids) {
-        activities.append(Activity{id, activityName(id)});
-    }
-    return activities;
+    return m_backend && m_backend->isRunning();
 }
 
 void ActivityDefaultsSwitcherModule::refresh()
 {
-    if (m_consumer->serviceStatus() != KActivities::Consumer::Running) {
+    if (!isRunning()) {
         return;
     }
 
-    const QString currentId = m_consumer->currentActivity();
-    const QList<Activity> activities = allActivities();
-    const Activity current{currentId, activityName(currentId)};
+    const QString currentId = m_backend->currentActivityId();
+    const QList<Activity> activities = m_backend->allActivities();
+    const Activity current{currentId, currentName(currentId, activities)};
     const std::optional<Activity> baseline = Resolver::selectBaselineActivity(activities);
 
     m_switcher.switchActivity(current, baseline, m_store.load(), readCurrentDefaults());
@@ -116,16 +118,32 @@ void ActivityDefaultsSwitcherModule::refresh()
 
 void ActivityDefaultsSwitcherModule::onDefaultsChanged()
 {
-    if (m_consumer->serviceStatus() != KActivities::Consumer::Running) {
+    if (!isRunning()) {
         return;
     }
 
-    const QString currentId = m_consumer->currentActivity();
-    const QList<Activity> activities = allActivities();
-    const Activity current{currentId, activityName(currentId)};
+    const QString currentId = m_backend->currentActivityId();
+    const QList<Activity> activities = m_backend->allActivities();
+    const Activity current{currentId, currentName(currentId, activities)};
     const std::optional<Activity> baseline = Resolver::selectBaselineActivity(activities);
 
     m_switcher.captureUserEdits(current, baseline, m_store.load(), readCurrentDefaults());
+}
+
+QString ActivityDefaultsSwitcherModule::currentName(const QString &id, const QList<Activity> &activities) const
+{
+    for (const Activity &activity : activities) {
+        if (activity.id == id) {
+            return activity.name;
+        }
+    }
+    // The current id may reference an activity the aggregate list does not yet
+    // report (e.g. transient state); fall back to the backend's own lookup so a
+    // name is still carried where the backend knows one.
+    if (m_backend) {
+        return m_backend->activityName(id);
+    }
+    return QString();
 }
 
 void ActivityDefaultsSwitcherModule::ensureConfigWatched(const QString &path)

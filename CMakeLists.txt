@@ -64,7 +64,7 @@ find_package(PlasmaActivities QUIET)
 if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
     # Installed to ${KDE_INSTALL_PLUGINDIR}/kf6/kded by packaging (out of scope
     # here); the JSON's X-KDE-Kded-autoload makes kded6 load it at session start.
-    add_library(activity-defaults-switcher-kded MODULE src/module.cpp src/module.json)
+    add_library(activity-defaults-switcher-kded MODULE src/module.cpp src/kactivities_backend.cpp src/activity_backend.cpp src/module.json)
     target_include_directories(activity-defaults-switcher-kded PRIVATE src)
     target_link_libraries(activity-defaults-switcher-kded PRIVATE
         ads-switcher
@@ -72,4 +72,24 @@ if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
         Plasma::Activities
         KF6::CoreAddons
     )
+
+    # kded shell tests (ticket 08): instantiate the module with injected fakes so
+    # it never constructs KActivities/D-Bus objects or touches a live config.
+    add_executable(tst_module
+        tests/tst_module.cpp
+        src/module.cpp
+        src/kactivities_backend.cpp
+        src/activity_backend.cpp
+    )
+    target_include_directories(tst_module PRIVATE src)
+    target_link_libraries(tst_module PRIVATE
+        ads-switcher
+        ads-writer
+        ads-store
+        KF6::DBusAddons
+        Plasma::Activities
+        KF6::CoreAddons
+        Qt6::Test
+    )
+    add_test(NAME module COMMAND tst_module)
 endif()
