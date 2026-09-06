@@ -56,12 +56,15 @@ private:
     void refresh();
     void onDefaultsChanged();
     void ensureConfigWatched(const QString &path);
+    void ensureConfigDirectoryWatched();
 
     std::unique_ptr<ActivityBackend> m_backend;
     QFileSystemWatcher m_watcher;
     QTimer m_editTimer; // coalesces rapid file-change events
     ProfileStore m_store; // loads profiles to feed the switcher
     Switcher m_switcher;
+    QString m_configDir; // the config directory watcher observes
+    QString m_configDirWatch; // the path currently watched for config changes
     QString m_mimeappsPath;
     QString m_kdeglobalsPath;
 

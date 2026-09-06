@@ -184,6 +184,7 @@ private slots:
     void mimeappsChangeCapturesBindingIntoCurrentActivity();
     void recreatedFileIsReWatchedAndCaptureRuns();
     void rapidChangesCoalesceIntoSingleCapture();
+    void configDirCreatedAfterStartupIsWatchedAndCaptureRuns();
 
 private:
     QString configDir() const;
@@ -650,6 +651,48 @@ void ModuleTest::rapidChangesCoalesceIntoSingleCapture()
     QCOMPARE(storePtr->saves, 1);
     QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
              QStringLiteral("firefox.desktop"));
+}
+
+// Ticket 10, AC1+AC2: the module must keep observing the config directory even
+// when it does not exist at construction (a fresh/blank config). Delete the
+// config directory before building the module so nothing watches for its later
+// creation; then create the directory and a mimeapps.list after startup. Both
+// must be picked up (the directory watched, then the file), and the user's edit
+// - a genuine file change - must drive capture into the store (spec user story
+// 6), exactly as it does when the directory existed all along.
+void ModuleTest::configDirCreatedAfterStartupIsWatchedAndCaptureRuns()
+{
+    // Start from a truly absent config dir: take the shared XDG_CONFIG_HOME
+    // down so the module is constructed with nothing to watch for its creation.
+    QDir config(configDir());
+    QVERIFY(config.removeRecursively());
+
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({Activity{QStringLiteral("work-id"), QStringLiteral("Work")}});
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    auto resolver = std::make_unique<FakeResolver>();
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
+
+    // The config directory appears only after the module started (fresh login).
+    QVERIFY(QDir().mkpath(configDir()));
+    QTest::qWait(400); // let the module notice the new directory and start watching it
+
+    // A mimeapps.list is now created in it; this edit must be captured into the
+    // current activity's profile.
+    writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
+    QTest::qWait(400); // directory watch -> file watch -> coalescing -> capture
+
+    QVERIFY(storePtr->saves >= 1);
+    QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+             QStringLiteral("firefox.desktop"));
+
+    // Leave the shared config dir present for the tests that follow.
+    QDir().mkpath(configDir());
 }
 
 int main(int argc, char **argv)

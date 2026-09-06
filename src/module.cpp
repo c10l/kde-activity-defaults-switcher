@@ -44,11 +44,10 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
     // kdeglobals write) - so it would never observe a real edit.
     const QString configDir =
         QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    m_configDir = configDir;
     m_mimeappsPath = configDir + QStringLiteral("/mimeapps.list");
     m_kdeglobalsPath = configDir + QStringLiteral("/kdeglobals");
-    if (!configDir.isEmpty() && QFile::exists(configDir)) {
-        m_watcher.addPath(configDir);
-    }
+    ensureConfigDirectoryWatched();
     ensureConfigWatched(m_mimeappsPath);
     ensureConfigWatched(m_kdeglobalsPath);
 
@@ -61,10 +60,14 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this,
             [this](const QString &) { m_editTimer.start(); });
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
-        // A directory event can mean a watched config file was created (or
-        // recreated after being deleted). Edits to an existing file arrive via
+        // A directory event can mean the config directory was just created (or
+        // recreated), or that a watched config file was created (or recreated
+        // after being deleted). Edits to an existing file arrive via
         // fileChanged; the rest of the directory noise (KDE writes plenty of
-        // config files) is ignored.
+        // config files) is ignored. ensureConfigDirectoryWatched upgrades the
+        // watch to the config dir itself the moment it appears, so config files
+        // created after startup are still observed.
+        ensureConfigDirectoryWatched();
         bool appeared = false;
         for (const QString &path : {m_mimeappsPath, m_kdeglobalsPath}) {
             if (!m_watcher.files().contains(path) && QFile::exists(path)) {
@@ -167,6 +170,46 @@ void ActivityDefaultsSwitcherModule::ensureConfigWatched(const QString &path)
     if (QFile::exists(path) && !m_watcher.files().contains(path)) {
         m_watcher.addPath(path);
     }
+}
+
+// Makes sure the config directory is watched so that a mimeapps.list or
+// kdeglobals created after startup (spec user story 6) is still observed. A
+// QFileSystemWatcher can only watch a path that exists, so when the config
+// directory is absent at construction (a fresh/blank config) we instead watch
+// its nearest existing ancestor: the directory's creation is then a directory
+// event on that ancestor, which re-enters this and upgrades to watching the
+// config dir itself. Once the config dir is watched, config files (re)added to
+// it surface as directory events and are re-added by the directoryChanged
+// handler.
+void ActivityDefaultsSwitcherModule::ensureConfigDirectoryWatched()
+{
+    if (m_configDir.isEmpty()) {
+        return;
+    }
+
+    // The path whose directory events let us see config files appear: the
+    // config directory when it exists, else its nearest existing ancestor.
+    QString target = m_configDir;
+    while (!QFile::exists(target)) {
+        const int slash = target.lastIndexOf(QLatin1Char('/'));
+        if (slash <= 0) {
+            return; // no watchable ancestor
+        }
+        target = target.left(slash);
+    }
+
+    if (target == m_configDirWatch) {
+        return;
+    }
+
+    // Upgrade: drop the stale ancestor (or vanished config dir) watch and watch
+    // what we actually need. QFileSystemWatcher removes a path it no longer
+    // sees, so removing an already-gone path is a harmless no-op.
+    if (!m_configDirWatch.isEmpty()) {
+        m_watcher.removePath(m_configDirWatch);
+    }
+    m_configDirWatch = target;
+    m_watcher.addPath(target);
 }
 
 K_PLUGIN_CLASS_WITH_JSON(ActivityDefaultsSwitcherModule, "module.json")
