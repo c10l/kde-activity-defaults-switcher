@@ -38,14 +38,14 @@ See the repository glossary (`CONTEXT.md`) for the domain vocabulary and
 - For the kded6 module: KF6 `DBusAddons` and Plasma Activities **dev** packages
 - For the KCM: KF6 `KCMUtils` and `KDeclarative` **dev** packages
 
-When the kded6 dev packages are not installed system-wide,
-`scripts/setup-deps.sh` stages them under `./deps` (gitignored) without
-touching the system.
+`make deps` (via `scripts/setup-deps.sh`) installs the required KF6 / Plasma /
+Qt6 dev packages system-wide with apt — the same set the CI workflow
+installs.
 
 ## Getting started
 
 ```sh
-make deps    # optional — stages the KDE dev packages not installed system-wide
+sudo make deps    # installs the KDE dev packages system-wide (apt)
 make build
 make test
 ```
@@ -85,7 +85,7 @@ All common tasks are wired up as `make` targets:
 | `make tidy`         | Run `clang-tidy` static analysis |
 | `make configure`    | (Re)run the cmake configure step |
 | `make clean`        | Remove the `build/` directory |
-| `make deps`         | Stage KDE dev packages into `./deps` |
+| `make deps`         | Install KDE dev packages system-wide (apt) |
 | `make check`        | `lint` + `test` (the full gate) |
 | `make help`         | Print the target list (default target) |
 
@@ -107,14 +107,26 @@ src/       shared domain (resolver, profile, store, writer), the kded6
            module, and the KCM (in progress)
 tests/     Qt Test suites (resolver, writer, switcher, store, module)
 docs/adr/  architecture decision records
-scripts/   setup-deps.sh (stages the KDE dev packages)
+scripts/   setup-deps.sh (installs the KDE dev packages via apt)
 build/     out-of-source CMake build directory (gitignored)
-deps/      staged KDE dev packages (gitignored)
 ```
 
 Install destinations follow KDE convention via `KDEInstallDirs`: the daemon
 lands in `${KDE_INSTALL_PLUGINDIR}/kf6/kded`; the KCM will get its own rule
 under `${KDE_INSTALL_KCMDIR}` when it lands.
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull
+request in a Debian `forky` container. It installs the build and toolchain
+dependencies via apt, then runs `make build`, `make test`, `make lint`, and
+`make format-check` — failing the job on any failure (including formatting
+drift).
+
+Run the same thing locally before pushing with `make ci` (needs `podman`):
+it copies the repo into a clean `debian:forky` container and runs the same
+`make build test lint format-check` steps, so the local `build/` directory never
+skews the result.
 
 ## License
 

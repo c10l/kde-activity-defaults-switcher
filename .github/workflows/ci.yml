@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 c10l
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-lint:
+    name: Build, test, and lint (Debian)
+    runs-on: ubuntu-latest
+    container: debian:forky
+    steps:
+      - name: Install build and toolchain dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            git \
+            extra-cmake-modules \
+            qt6-base-dev \
+            libkf6service-dev \
+            libkf6config-dev \
+            libkf6coreaddons-dev \
+            libkf6dbusaddons-dev \
+            libplasmaactivities-dev \
+            kded6-dev \
+            clang-format \
+            clang-tidy
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test
+
+      - name: Lint (format check + clang-tidy)
+        run: make lint
+
+      - name: Format check
+        run: make format-check

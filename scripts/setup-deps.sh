@@ -2,61 +2,36 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 # Copyright (C) 2026 c10l
 
-# Stages the KDE development headers + CMake package configs needed to build
-# the kded6 module into ./deps (gitignored), without touching the system.
+# Installs the Debian packages the build needs.
 #
-# The runtime shared libraries (libKF6DBusAddons, libPlasmaActivities) are
-# already installed system-wide; only the corresponding -dev packages are
-# missing in this environment. This downloads and extracts just those -dev
-# packages and points their versioned .so import locations at the system
-# libraries (which match the same versions).
+# The KF6 / Plasma / Qt6 development packages are installed system-wide via
+# apt (same approach the CI workflow uses). Run this on a Debian system with
+# root to provision a full build environment in one step.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
-
-if command -v apt-get >/dev/null 2>&1; then
-    apt_get=apt-get
-elif command -v apt >/dev/null 2>&1; then
-    apt_get=apt
-else
-    echo "error: neither apt-get nor apt found" >&2
+if [ "$(id -u)" -ne 0 ]; then
+    echo "error: must be run as root (needs apt-get)" >&2
     exit 1
 fi
 
-mkdir -p deps
-cd deps
+pkgs=(
+    build-essential
+    cmake
+    git
+    extra-cmake-modules
+    qt6-base-dev
+    libkf6service-dev
+    libkf6config-dev
+    libkf6coreaddons-dev
+    libkf6dbusaddons-dev
+    libplasmaactivities-dev
+    kded6-dev
+    clang-format
+    clang-tidy
+)
 
-pkgs=(libkf6dbusaddons-dev libplasmaactivities-dev kded6-dev)
-for pkg in "${pkgs[@]}"; do
-    if ! compgen -G "${pkg}_*.deb" >/dev/null; then
-        "$apt_get" download "$pkg"
-    fi
-done
+apt-get update
+DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y --no-install-recommends "${pkgs[@]}"
 
-for deb in ./*.deb; do
-    dpkg-deb -x "$deb" .
-done
-
-# The imported CMake targets reference the fully-versioned .so shipped in the
-# runtime packages. Symlink those from the system libraries.
-libdir=usr/lib/x86_64-linux-gnu
-mkdir -p "$libdir"
-
-link_system_libs() {
-    local prefix="$1"
-    local found=0
-    local f
-    for f in "/usr/lib/x86_64-linux-gnu/${prefix}.so."*; do
-        [ -e "$f" ] || continue
-        ln -sf "$f" "$libdir/$(basename "$f")"
-        found=1
-    done
-    if [ "$found" -eq 0 ]; then
-        echo "warning: no system ${prefix}.so.* found" >&2
-    fi
-}
-
-link_system_libs libKF6DBusAddons
-link_system_libs libPlasmaActivities
-
-echo "KDE dev deps staged in deps/ (headers, CMake package configs, lib symlinks)."
+echo "KDE dev packages installed system-wide."

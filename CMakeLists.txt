@@ -73,13 +73,8 @@ add_test(NAME store COMMAND tst_store)
 
 # --- kded6 module (ticket 04) ---
 # The KDEDModule base class and the KActivities consumer come from the
-# KF6DBusAddons and PlasmaActivities dev packages. When those -dev packages
-# are not installed system-wide, scripts/setup-deps.sh stages them under
-# ./deps (gitignored) and the prefix below makes find_package see them.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/usr")
-    list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/deps/usr")
-endif()
-
+# KF6DBusAddons and PlasmaActivities dev packages, installed system-wide via
+# `make deps` (scripts/setup-deps.sh) / apt.
 find_package(KF6DBusAddons QUIET)
 find_package(PlasmaActivities QUIET)
 
