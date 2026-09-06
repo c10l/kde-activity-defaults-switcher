@@ -6,22 +6,22 @@
 
 **Blocked by:** 06 (Terminal component + baseline fallback).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The module accepts injected `Resolver`/`Writer`/`ProfileStore` (and any other seam) so tests never touch KDE, D-Bus, or the filesystem.
-- [ ] A shell test covers: current-activity change calls `Switcher::switchActivity` with the resolved current/baseline/profiles/defaults.
-- [ ] A shell test covers: a config-file change (after coalescing) calls `Switcher::captureUserEdits`.
-- [ ] A shell test covers: the 100 ms timer coalesces rapid file-change events into a single capture.
-- [ ] A shell test covers: a recreated watched file is re-added to the watcher and triggers a capture.
-- [ ] `recreatedFileIsReWatchedAndCaptureRuns` must delete and recreate the watched file, not rewrite it in place: a `QIODevice::Truncate` rewrite keeps the same inode, so the `directoryChanged` → re-add branch never runs (verified by disabling that handler — the test still passes). As written it does not cover "re-added to the watcher".
-- [ ] A shell test covers: startup `refresh()` when the KActivities backend is already `Running`, and `KActivities::Consumer::serviceStatus` changing to `Running` triggers a refresh.
-- [ ] A shell test covers: no refresh/capture happens while the KActivities backend is not `Running`.
-- [ ] Update `.scratch/activity-defaults-switcher/spec.md` so its change-detection wording says `QFileSystemWatcher` (not `KConfigWatcher`), matching the implementation and the rationale already documented in `src/module.cpp`.
+- [x] The module accepts injected `Resolver`/`Writer`/`ProfileStore` (and any other seam) so tests never touch KDE, D-Bus, or the filesystem.
+- [x] A shell test covers: current-activity change calls `Switcher::switchActivity` with the resolved current/baseline/profiles/defaults.
+- [x] A shell test covers: a config-file change (after coalescing) calls `Switcher::captureUserEdits`.
+- [x] A shell test covers: the 100 ms timer coalesces rapid file-change events into a single capture.
+- [x] A shell test covers: a recreated watched file is re-added to the watcher and triggers a capture.
+- [x] `recreatedFileIsReWatchedAndCaptureRuns` must delete and recreate the watched file, not rewrite it in place: a `QIODevice::Truncate` rewrite keeps the same inode, so the `directoryChanged` → re-add branch never runs (verified by disabling that handler — the test still passes). As written it does not cover "re-added to the watcher".
+- [x] A shell test covers: startup `refresh()` when the KActivities backend is already `Running`, and `KActivities::Consumer::serviceStatus` changing to `Running` triggers a refresh.
+- [x] A shell test covers: no refresh/capture happens while the KActivities backend is not `Running`.
+- [x] Update `.scratch/activity-defaults-switcher/spec.md` so its change-detection wording says `QFileSystemWatcher` (not `KConfigWatcher`), matching the implementation and the rationale already documented in `src/module.cpp`.
 
 ### Notes from review of 08
 
-- Criterion 2's "profiles/defaults" half is unasserted: the shell tests record `lastProfiles`/`lastDefaults` in the fake resolver but never check what the module passed.
-- The module keeps a real `ProfileStore m_store` for loads while the injected store only serves saves (its `load()` is never exercised in `tst_module`); production runs two store instances against the same file. Consider routing loads through the injected store too.
+- ~~Criterion 2's "profiles/defaults" half is unasserted: the shell tests record `lastProfiles`/`lastDefaults` in the fake resolver but never check what the module passed.~~ Addressed in `3e7ff67` — `resolverReceivesLoadedProfilesAndCurrentDefaults` seeds a real throwaway store + `mimeapps.list` and asserts both flow into the resolver.
+- The module keeps a real `ProfileStore m_store` for loads while the injected store only serves saves (its `load()` is never exercised in `tst_module`); production runs two store instances against the same file. Accepted as deferred in `3e7ff67`: unifying them would change the reviewed `Switcher`'s store ownership, and the two stateless instances already operate on the same file, so production is correct (just redundant). Open for a future cleanup if desired.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
