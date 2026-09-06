@@ -8,6 +8,25 @@ set(CMAKE_AUTOMOC ON)
 # be position-independent.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# KDE install locations (${KDE_INSTALL_PLUGINDIR}, ${KDE_INSTALL_KCMDIR}, …)
+# used by the install() rules below. Included before find_package(Qt6) so
+# KDEInstallDirs — not Qt's GNUInstallDirs-equivalent — owns CMAKE_INSTALL_*.
+# 5.240 is the ECM release that defaults to Qt6 when Qt6 isn't found yet.
+find_package(ECM 5.240 REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+
+# kded6 discovers modules under Qt's plugin directory, which lives in /usr on
+# system installs. Default the prefix there (instead of CMake's /usr/local) so
+# a plain `make install` lands the module where kded6 finds it; this also makes
+# KDEInstallDirs adopt Qt's multi-arch path scheme. Explicit -DCMAKE_INSTALL_PREFIX
+# still wins.
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "/usr" CACHE PATH
+        "Install path prefix, prepended onto install directories." FORCE)
+endif()
+
+include(KDEInstallDirs)
+
 find_package(Qt6 REQUIRED COMPONENTS Core Test)
 find_package(KF6Service REQUIRED)
 find_package(KF6Config REQUIRED)
@@ -62,8 +81,8 @@ find_package(KF6DBusAddons QUIET)
 find_package(PlasmaActivities QUIET)
 
 if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
-    # Installed to ${KDE_INSTALL_PLUGINDIR}/kf6/kded by packaging (out of scope
-    # here); the JSON's X-KDE-Kded-autoload makes kded6 load it at session start.
+    # The module and its JSON are installed side by side into the kded plugin
+    # directory; X-KDE-Kded-autoload makes kded6 load it at session start.
     add_library(activity-defaults-switcher-kded MODULE src/module.cpp src/kactivities_backend.cpp src/activity_backend.cpp src/module.json)
     target_include_directories(activity-defaults-switcher-kded PRIVATE src)
     target_link_libraries(activity-defaults-switcher-kded PRIVATE
@@ -72,6 +91,11 @@ if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
         Plasma::Activities
         KF6::CoreAddons
     )
+
+    install(TARGETS activity-defaults-switcher-kded
+        DESTINATION ${KDE_INSTALL_PLUGINDIR}/kf6/kded)
+    install(FILES src/module.json
+        DESTINATION ${KDE_INSTALL_PLUGINDIR}/kf6/kded)
 
     # kded shell tests (ticket 08): instantiate the module with injected fakes so
     # it never constructs KActivities/D-Bus objects or touches a live config.
@@ -93,3 +117,14 @@ if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
     )
     add_test(NAME module COMMAND tst_module)
 endif()
+
+# --- uninstall ---
+# CMake has no built-in uninstall. This custom target removes every file
+# recorded in install_manifest.txt (written by `cmake --install`); see
+# cmake_uninstall.cmake.in for the removal script.
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+    @ONLY)
+add_custom_target(uninstall
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake")

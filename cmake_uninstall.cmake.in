@@ -1,0 +1,28 @@
+# Uninstall script generated from cmake_uninstall.cmake.in.
+#
+# Removes every file recorded in install_manifest.txt (written by
+# `cmake --install`). DESTDIR is prepended to each recorded path so staged
+# installs (`DESTDIR=... cmake --install`) are removed from the same staging
+# root they were installed into.
+
+if(NOT EXISTS "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt")
+    message(FATAL_ERROR
+        "No install manifest at @CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt. "
+        "Run `cmake --install` (or `make install`) first.")
+endif()
+
+file(READ "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt" files)
+string(REGEX REPLACE "\n" ";" files "${files}")
+
+foreach(file ${files})
+    if(NOT file)
+        continue()
+    endif()
+    set(path "$ENV{DESTDIR}${file}")
+    if(EXISTS "${path}" OR IS_SYMLINK "${path}")
+        message(STATUS "Removing: ${path}")
+        file(REMOVE "${path}")
+    else()
+        message(STATUS "Skipping (not found): ${path}")
+    endif()
+endforeach()

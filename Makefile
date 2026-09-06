@@ -19,7 +19,7 @@ SOURCES := $(shell find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -pr
 
 .DEFAULT_GOAL := help
 
-.PHONY: help configure build test lint format format-check tidy clean deps check
+.PHONY: help configure build test install uninstall lint format format-check tidy clean deps check
 
 help:
 	@echo "Activity Defaults Switcher — common tasks:"
@@ -30,6 +30,8 @@ help:
 	@echo "  make format        Apply clang-format to src/ and tests/ in place"
 	@echo "  make format-check  Fail if clang-format would change anything"
 	@echo "  make tidy          Run clang-tidy static analysis"
+	@echo "  make install       Build and install to \$${KDE_INSTALL_PLUGINDIR}"
+	@echo "  make uninstall     Remove what 'make install' put in place"
 	@echo "  make configure     (Re)run the cmake configure step"
 	@echo "  make clean         Remove the build directory"
 	@echo "  make deps          Stage KDE dev packages into ./deps"
@@ -43,6 +45,12 @@ $(BUILD_DIR)/CMakeCache.txt:
 
 build: $(BUILD_DIR)/CMakeCache.txt
 	$(CMAKE) --build $(BUILD_DIR) --parallel
+
+install: build
+	$(CMAKE) --install $(BUILD_DIR)
+
+uninstall:
+	$(CMAKE) --build $(BUILD_DIR) --target uninstall
 
 test: build
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure

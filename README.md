@@ -31,6 +31,7 @@ See the repository glossary (`CONTEXT.md`) for the domain vocabulary and
 ## Requirements
 
 - CMake 3.16+
+- Extra CMake Modules (ECM)
 - A C++20 compiler
 - Qt 6 (`Core`, `Test`, QML)
 - KF6 (`Service`, `Config`, `CoreAddons`)
@@ -49,6 +50,22 @@ make build
 make test
 ```
 
+To install the daemon into the running KDE session:
+
+```sh
+sudo make install
+```
+
+`make install` builds, then runs `cmake --install` into Qt's real plugin
+location (`${KDE_INSTALL_PLUGINDIR}/kf6/kded`). Remove it again with
+`sudo make uninstall`. For packaging, override the prefix and use `DESTDIR` as
+usual:
+
+```sh
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/usr
+DESTDIR=/tmp/stage make install
+```
+
 `make build` configures into `./build` (gitignored) on first use and then builds
 incrementally.
 
@@ -60,6 +77,8 @@ All common tasks are wired up as `make` targets:
 | ------ | ------------ |
 | `make build`        | Configure (if needed) and build |
 | `make test`         | Build, then run the CTest suite |
+| `make install`      | Build and install to `${KDE_INSTALL_PLUGINDIR}` |
+| `make uninstall`    | Remove what `make install` put in place |
 | `make lint`         | Format check + clang-tidy (skips tools not installed) |
 | `make format`       | Apply `clang-format` to `src/` and `tests/` in place |
 | `make format-check` | Fail if `clang-format` would change anything |
@@ -92,3 +111,7 @@ scripts/   setup-deps.sh (stages the KDE dev packages)
 build/     out-of-source CMake build directory (gitignored)
 deps/      staged KDE dev packages (gitignored)
 ```
+
+Install destinations follow KDE convention via `KDEInstallDirs`: the daemon
+lands in `${KDE_INSTALL_PLUGINDIR}/kf6/kded`; the KCM will get its own rule
+under `${KDE_INSTALL_KCMDIR}` when it lands.
