@@ -1,0 +1,91 @@
+# Activity Defaults Switcher — developer convenience tasks.
+#
+# Wraps the CMake build, the CTest suite, and the C++ formatters/linters so
+# the common commands are one target each. Run `make help` for the list.
+
+BUILD_DIR    ?= build
+CMAKE        ?= cmake
+CTEST        ?= ctest
+CLANG_FORMAT ?= clang-format
+CLANG_TIDY   ?= clang-tidy
+
+# Passed to the initial cmake configure step. compile_commands.json is needed
+# by clang-tidy; the kded6 module flags its own optional deps (see
+# scripts/setup-deps.sh) and CMakeLists.txt.
+CMAKE_FLAGS  ?= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+# All C++ sources, used by the format/lint targets.
+SOURCES := $(shell find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -print)
+
+.DEFAULT_GOAL := help
+
+.PHONY: help configure build test lint format format-check tidy clean deps check
+
+help:
+	@echo "Activity Defaults Switcher — common tasks:"
+	@echo ""
+	@echo "  make build         Configure (if needed) and build"
+	@echo "  make test          Build and run the CTest suite"
+	@echo "  make lint          Format check + clang-tidy (skips tools not installed)"
+	@echo "  make format        Apply clang-format to src/ and tests/ in place"
+	@echo "  make format-check  Fail if clang-format would change anything"
+	@echo "  make tidy          Run clang-tidy static analysis"
+	@echo "  make configure     (Re)run the cmake configure step"
+	@echo "  make clean         Remove the build directory"
+	@echo "  make deps          Stage KDE dev packages into ./deps"
+	@echo "  make check         lint + test (the full gate)"
+
+configure:
+	$(CMAKE) -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+
+$(BUILD_DIR)/CMakeCache.txt:
+	$(CMAKE) -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+
+build: $(BUILD_DIR)/CMakeCache.txt
+	$(CMAKE) --build $(BUILD_DIR) --parallel
+
+test: build
+	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
+
+format:
+	@command -v $(CLANG_FORMAT) >/dev/null 2>&1 || \
+		{ echo "error: $(CLANG_FORMAT) not found in PATH" >&2; exit 1; }
+	$(CLANG_FORMAT) --style=file -i $(SOURCES)
+
+format-check:
+	@command -v $(CLANG_FORMAT) >/dev/null 2>&1 || \
+		{ echo "error: $(CLANG_FORMAT) not found in PATH" >&2; exit 1; }
+	$(CLANG_FORMAT) --style=file --dry-run --Werror $(SOURCES)
+
+tidy: $(BUILD_DIR)/compile_commands.json
+	@command -v $(CLANG_TIDY) >/dev/null 2>&1 || \
+		{ echo "error: $(CLANG_TIDY) not found in PATH" >&2; exit 1; }
+	$(CLANG_TIDY) -p $(BUILD_DIR) $(SOURCES)
+
+# clang-tidy needs compile_commands.json. An existing build directory created
+# before CMAKE_EXPORT_COMPILE_COMMANDS was enabled won't have one, so re-run
+# configure once to (re)generate it.
+$(BUILD_DIR)/compile_commands.json: $(BUILD_DIR)/CMakeCache.txt
+	@test -f $@ || $(CMAKE) -S . -B $(BUILD_DIR) $(CMAKE_FLAGS)
+
+# Combined gate: run each lint tool that is installed, and note the ones that
+# aren't. Fails only when an available tool reports a problem.
+lint:
+	@if command -v $(CLANG_FORMAT) >/dev/null 2>&1; then \
+		$(MAKE) format-check; \
+	else \
+		echo "note: $(CLANG_FORMAT) not found in PATH; skipping format check"; \
+	fi
+	@if command -v $(CLANG_TIDY) >/dev/null 2>&1; then \
+		$(MAKE) tidy; \
+	else \
+		echo "note: $(CLANG_TIDY) not found in PATH; skipping static analysis"; \
+	fi
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+deps:
+	./scripts/setup-deps.sh
+
+check: lint test

@@ -1,0 +1,17 @@
+---
+# clang-format config for activity-defaults-switcher.
+# Matches the existing hand-written style: 4-space indent, Linux brace
+# placement (function/class braces on the next line, control flow on the same
+# line), left-aligned pointers/references.
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+BreakBeforeBraces: Linux
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
