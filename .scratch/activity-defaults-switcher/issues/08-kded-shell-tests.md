@@ -21,7 +21,7 @@
 ### Notes from review of 08
 
 - ~~Criterion 2's "profiles/defaults" half is unasserted: the shell tests record `lastProfiles`/`lastDefaults` in the fake resolver but never check what the module passed.~~ Addressed in `3e7ff67` — `resolverReceivesLoadedProfilesAndCurrentDefaults` seeds a real throwaway store + `mimeapps.list` and asserts both flow into the resolver.
-- The module keeps a real `ProfileStore m_store` for loads while the injected store only serves saves (its `load()` is never exercised in `tst_module`); production runs two store instances against the same file. Accepted as deferred in `3e7ff67`: unifying them would change the reviewed `Switcher`'s store ownership, and the two stateless instances already operate on the same file, so production is correct (just redundant). Open for a future cleanup if desired.
+- The module keeps a real `ProfileStore m_store` for loads while the injected store only serves saves (its `load()` is never exercised in `tst_module`); production runs two store instances against the same file. Accepted as deferred in `3e7ff67`: unifying them would change the reviewed `Switcher`'s store ownership, and the two stateless instances already operate on the same file, so production is correct (just redundant). Now tracked as ticket 17.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
