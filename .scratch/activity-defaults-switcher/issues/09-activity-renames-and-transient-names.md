@@ -7,13 +7,13 @@
 
 **Blocked by:** 08 (kded shell tests) — the module needs the injection seam to test these behaviours.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Renaming an activity triggers a refresh that re-selects the baseline (e.g. listen to `KActivities::Info::nameChanged`, or re-query names on the relevant signal).
-- [ ] Renaming an activity to `"Default"` makes it the baseline.
-- [ ] Renaming `"Default"` away from that name falls back to the first activity in the ordered list.
-- [ ] A transient empty name from a not-yet-synchronized `Info` cannot mis-select the baseline (ignore or re-query empty names).
-- [ ] Shell tests pin these behaviours with injected fakes (per ticket 08).
+- [x] Renaming an activity triggers a refresh that re-selects the baseline (e.g. listen to `KActivities::Info::nameChanged`, or re-query names on the relevant signal).
+- [x] Renaming an activity to `"Default"` makes it the baseline.
+- [x] Renaming `"Default"` away from that name falls back to the first activity in the ordered list.
+- [x] A transient empty name from a not-yet-synchronized `Info` cannot mis-select the baseline (ignore or re-query empty names).
+- [x] Shell tests pin these behaviours with injected fakes (per ticket 08).
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
