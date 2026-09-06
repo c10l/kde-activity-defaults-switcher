@@ -38,6 +38,11 @@ Q_SIGNALS:
     void currentActivityChanged(const QString &id);
     // The set of activities changed (e.g. one created or removed).
     void activitiesChanged();
+    // The display name of one or more existing activities changed (a rename),
+    // and the backend's reported names are already updated. The concrete
+    // backend emits this on KActivities::Info::nameChanged (which also fires
+    // when a freshly created Info synchronizes its initially-empty name).
+    void activitiesRenamed();
 };
 
 } // namespace ads

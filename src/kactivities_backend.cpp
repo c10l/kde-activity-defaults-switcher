@@ -58,6 +58,17 @@ QString KActivitiesActivityBackend::activityName(const QString &id) const
         // docs); callers that must not mis-select on empty names handle that.
         info = new KActivities::Info(id);
         m_info.insert(id, info);
+        // Observe renames (and the initial synchronization of a freshly created
+        // Info's empty name) so the module can refresh and re-select the
+        // baseline: the Consumer's activitiesChanged does not fire on a rename.
+        // activityName is const (an override of the backend's read accessor), so
+        // the connection context and the emission use a non-const this - this
+        // method already mutates the mutable m_info cache, so the const-ness is
+        // accessor-only here. The Info is owned for this backend's lifetime.
+        auto *self = const_cast<KActivitiesActivityBackend *>(this);
+        QObject::connect(info, &KActivities::Info::nameChanged, self, [self](const QString &) {
+            emit self->activitiesRenamed();
+        });
     }
     return info->name();
 }

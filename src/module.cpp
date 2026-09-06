@@ -85,6 +85,9 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
     connect(m_backend.get(), &ActivityBackend::activitiesChanged, this, [this]() {
         refresh();
     });
+    connect(m_backend.get(), &ActivityBackend::activitiesRenamed, this, [this]() {
+        refresh();
+    });
     connect(m_backend.get(), &ActivityBackend::runningChanged, this, [this](bool running) {
         if (running) {
             refresh();
@@ -111,7 +114,7 @@ void ActivityDefaultsSwitcherModule::refresh()
     const QString currentId = m_backend->currentActivityId();
     const QList<Activity> activities = m_backend->allActivities();
     const Activity current{currentId, currentName(currentId, activities)};
-    const std::optional<Activity> baseline = Resolver::selectBaselineActivity(activities);
+    const std::optional<Activity> baseline = selectedBaseline(activities);
 
     m_switcher.switchActivity(current, baseline, m_store.load(), readCurrentDefaults());
 }
@@ -125,7 +128,7 @@ void ActivityDefaultsSwitcherModule::onDefaultsChanged()
     const QString currentId = m_backend->currentActivityId();
     const QList<Activity> activities = m_backend->allActivities();
     const Activity current{currentId, currentName(currentId, activities)};
-    const std::optional<Activity> baseline = Resolver::selectBaselineActivity(activities);
+    const std::optional<Activity> baseline = selectedBaseline(activities);
 
     m_switcher.captureUserEdits(current, baseline, m_store.load(), readCurrentDefaults());
 }
@@ -144,6 +147,24 @@ QString ActivityDefaultsSwitcherModule::currentName(const QString &id, const QLi
         return m_backend->activityName(id);
     }
     return QString();
+}
+
+// Picks the baseline activity from the backend's activity list, ignoring any
+// activity whose name is not yet available (a freshly created KActivities::Info
+// can report an empty name before it synchronizes). Such a transient empty name
+// would sort first in the canonical order and, absent an activity literally
+// named "Default", would otherwise be mis-selected as the fallback baseline.
+// A nameless activity is never a valid baseline candidate: its eventual
+// synchronized name is reported via activitiesRenamed and re-resolves then.
+std::optional<Activity> ActivityDefaultsSwitcherModule::selectedBaseline(const QList<Activity> &activities) const
+{
+    QList<Activity> named;
+    for (const Activity &activity : activities) {
+        if (!activity.name.isEmpty()) {
+            named.append(activity);
+        }
+    }
+    return Resolver::selectBaselineActivity(named);
 }
 
 void ActivityDefaultsSwitcherModule::ensureConfigWatched(const QString &path)

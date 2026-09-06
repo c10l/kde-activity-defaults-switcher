@@ -70,6 +70,20 @@ public:
     {
         m_names.insert(id, name);
     }
+    // Simulate a user renaming one activity: update the reported name for that
+    // id (both in the activity list and the fallback lookup) and emit the
+    // rename signal the module is connected to, exactly as KActivities::Info's
+    // nameChanged does on the real backend.
+    void renameActivity(const QString &id, const QString &name)
+    {
+        for (auto &a : m_activities) {
+            if (a.id == id) {
+                a.name = name;
+            }
+        }
+        setActivityName(id, name);
+        emit activitiesRenamed();
+    }
 
     bool m_running = false;
     QString m_currentId;
@@ -175,6 +189,10 @@ private slots:
     void notRunningDoesNotResolve();
     void activityChangeResolvesWithCorrectBaseline();
     void resolverReceivesLoadedProfilesAndCurrentDefaults();
+    void activityRenameTriggersRefresh();
+    void renamingActivityToDefaultMakesItBaseline();
+    void renamingDefaultAwayFallsBackToAlphabeticalFirst();
+    void transientEmptyNameDoesNotBecomeBaseline();
     void mimeappsChangeCapturesBindingIntoCurrentActivity();
     void recreatedFileIsReWatchedAndCaptureRuns();
     void rapidChangesCoalesceIntoSingleCapture();
@@ -423,6 +441,157 @@ void ModuleTest::resolverReceivesLoadedProfilesAndCurrentDefaults()
              QStringLiteral("chromium.desktop"));
     QCOMPARE(resolverPtr->lastDefaults.value(Component::Browser),
              QStringLiteral("firefox.desktop"));
+}
+
+// AC1: a rename is surfaced to the module through the backend's rename signal,
+// so the module refreshes and re-selects the baseline from the freshly-read
+// activity names. Here renaming "Bob" to "Aaron" moves it ahead of "Alice" in
+// the canonical order, which would never re-resolve unless the rename reached
+// the module.
+void ModuleTest::activityRenameTriggersRefresh()
+{
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({
+        Activity{QStringLiteral("alice-id"), QStringLiteral("Alice")},
+        Activity{QStringLiteral("bob-id"), QStringLiteral("Bob")},
+    });
+    backend->setCurrentActivity(QStringLiteral("alice-id"));
+    FakeBackend *backendPtr = backend.get();
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr,
+                                          std::move(backend),
+                                          std::move(resolver),
+                                          std::make_unique<FakeWriter>(),
+                                          std::make_unique<FakeStore>());
+
+    // Startup refresh: no "Default", so the fallback baseline is the
+    // alphabetical-first activity (Alice).
+    const int callsAtStartup = resolverPtr->calls;
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("alice-id"));
+
+    // Rename Bob to Aaron: it now leads the canonical order, so the fallback
+    // baseline must move to bob-id and the module must refresh to notice.
+    backendPtr->renameActivity(QStringLiteral("bob-id"), QStringLiteral("Aaron"));
+
+    QCOMPARE(resolverPtr->calls, callsAtStartup + 1);
+    QVERIFY(resolverPtr->lastBaseline.has_value());
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("bob-id"));
+    QCOMPARE(resolverPtr->lastBaseline->name, QStringLiteral("Aaron"));
+}
+
+// AC2: renaming an activity (that was not the baseline) to "Default" makes it
+// the baseline, because the rename is observed and re-resolved rather than
+// deferred until some unrelated event.
+void ModuleTest::renamingActivityToDefaultMakesItBaseline()
+{
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({
+        Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
+        Activity{QStringLiteral("other-id"), QStringLiteral("Alpha")},
+    });
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    FakeBackend *backendPtr = backend.get();
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr,
+                                          std::move(backend),
+                                          std::move(resolver),
+                                          std::make_unique<FakeWriter>(),
+                                          std::make_unique<FakeStore>());
+
+    // Startup: no "Default", so the fallback baseline is the alphabetical-first
+    // (Alpha / other-id), not work-id.
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("other-id"));
+
+    // Rename the work activity to literally be "Default".
+    backendPtr->renameActivity(QStringLiteral("work-id"), QStringLiteral("Default"));
+
+    QVERIFY(resolverPtr->lastBaseline.has_value());
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("work-id"));
+    QCOMPARE(resolverPtr->lastBaseline->name, QStringLiteral("Default"));
+}
+
+// AC3: renaming the "Default" activity away from that name drops it as the
+// baseline and the fallback (first in the canonical order) takes over.
+void ModuleTest::renamingDefaultAwayFallsBackToAlphabeticalFirst()
+{
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({
+        Activity{QStringLiteral("def-id"), QStringLiteral("Default")},
+        Activity{QStringLiteral("alpha-id"), QStringLiteral("Alpha")},
+        Activity{QStringLiteral("zulu-id"), QStringLiteral("Zulu")},
+    });
+    backend->setCurrentActivity(QStringLiteral("alpha-id"));
+    FakeBackend *backendPtr = backend.get();
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr,
+                                          std::move(backend),
+                                          std::move(resolver),
+                                          std::make_unique<FakeWriter>(),
+                                          std::make_unique<FakeStore>());
+
+    // The activity literally named "Default" is the baseline at startup.
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("def-id"));
+
+    // Rename it away from "Default"; with no "Default" left the fallback is the
+    // alphabetical-first (Alpha).
+    backendPtr->renameActivity(QStringLiteral("def-id"), QStringLiteral("Middle"));
+
+    QVERIFY(resolverPtr->lastBaseline.has_value());
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("alpha-id"));
+    QCOMPARE(resolverPtr->lastBaseline->name, QStringLiteral("Alpha"));
+}
+
+// AC4: a not-yet-synchronized KActivities::Info can transiently report an empty
+// name for an activity. Because empty sorts first in the canonical order, an
+// empty-named activity could otherwise be mis-selected as the fallback baseline
+// when no "Default" exists. The module must ignore nameless activities when
+// choosing the baseline.
+void ModuleTest::transientEmptyNameDoesNotBecomeBaseline()
+{
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    // A freshly added activity whose info has not synchronized yet reports an
+    // empty name, alongside the real (named) current activity.
+    backend->setActivities({
+        Activity{QStringLiteral("fresh-id"), QString()},
+        Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
+    });
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    FakeBackend *backendPtr = backend.get();
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr,
+                                          std::move(backend),
+                                          std::move(resolver),
+                                          std::make_unique<FakeWriter>(),
+                                          std::make_unique<FakeStore>());
+    const int callsAtStartup = resolverPtr->calls;
+
+    // No "Default" and the empty-named activity sorts first, but the baseline
+    // must be the named "Work", never the transient empty one.
+    QVERIFY(resolverPtr->lastBaseline.has_value());
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("work-id"));
+
+    // A re-resolve (e.g. the freshly added activity arriving via
+    // activitiesChanged) must still not hand the empty name over as baseline.
+    backendPtr->setActivities({
+        Activity{QStringLiteral("fresh-id"), QString()},
+        Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
+    });
+    QCOMPARE(resolverPtr->calls, callsAtStartup + 1);
+    QVERIFY(resolverPtr->lastBaseline.has_value());
+    QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("work-id"));
+    QCOMPARE(resolverPtr->lastBaseline->name, QStringLiteral("Work"));
 }
 
 // Criterion 3: a change to a watched config file (a System Settings edit) is

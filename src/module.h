@@ -49,6 +49,7 @@ public:
 private:
     void init(std::unique_ptr<ActivityBackend> backend);
     QString currentName(const QString &id, const QList<Activity> &activities) const;
+    std::optional<Activity> selectedBaseline(const QList<Activity> &activities) const;
     bool isRunning() const;
     void refresh();
     void onDefaultsChanged();
