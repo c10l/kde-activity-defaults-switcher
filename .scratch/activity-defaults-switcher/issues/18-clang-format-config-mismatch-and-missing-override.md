@@ -16,12 +16,16 @@
 
 **Blocked by:** none.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `.clang-format` sets `PointerAlignment: Right`, `AccessModifierOffset: -4`, `AlignTrailingComments: false`, and `BreakBeforeBraces: Custom` with `BraceWrapping.AfterNamespace: false` (keeping `AfterClass`/`AfterFunction`/`AfterStruct` true and `AfterControlStatement: Never`), and the header comment is updated to describe the real style.
-- [ ] `make format-check` passes on a clean tree with clang-format 21 (any residual hand-formatted lines in `src/`/`tests/` are either brought in line with the config or removed from the format target).
-- [ ] `KActivitiesActivityBackend::activityName` is marked `override`.
-- [ ] `make tidy` reports no real warnings (only the pre-existing suppressed/3rd-party noise), and `ctest` stays green.
+- [x] `.clang-format` sets `PointerAlignment: Right`, `AccessModifierOffset: -4`, `AlignTrailingComments: false`, and `BreakBeforeBraces: Custom` with `BraceWrapping.AfterNamespace: false` (keeping `AfterClass`/`AfterFunction` true and `AfterControlStatement: Never`; `AfterStruct: false` — see review note), and the header comment is updated to describe the real style.
+- [x] `make format-check` passes on a clean tree with clang-format 21 (any residual hand-formatted lines in `src/`/`tests/` are either brought in line with the config or removed from the format target).
+- [x] `KActivitiesActivityBackend::activityName` is marked `override`.
+- [x] `make tidy` reports no real warnings (only the pre-existing suppressed/3rd-party noise), and `ctest` stays green.
+
+### Notes from review of 18
+
+- The ticket's `AfterStruct: true` was a factual error: the committed style writes `struct Activity {` and `struct Binding {` with the brace on the same line (`src/domain.h`, unchanged before and after this ticket). `AfterStruct: true` would have moved those braces and failed criterion 2, contradicting the ticket's own "match the committed style" premise. The implementation's `AfterStruct: false` is correct and required; criterion 1 corrected accordingly.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
