@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 c10l
+
 # Stages the KDE development headers + CMake package configs needed to build
 # the kded6 module into ./deps (gitignored), without touching the system.
 #

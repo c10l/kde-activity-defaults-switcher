@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 c10l
+
 cmake_minimum_required(VERSION 3.16)
 project(activity-defaults-switcher LANGUAGES CXX)
 

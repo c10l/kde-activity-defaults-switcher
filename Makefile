@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 c10l
+
 # Activity Defaults Switcher — developer convenience tasks.
 #
 # Wraps the CMake build, the CTest suite, and the C++ formatters/linters so
