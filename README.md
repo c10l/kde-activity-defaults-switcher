@@ -118,15 +118,16 @@ under `${KDE_INSTALL_KCMDIR}` when it lands.
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull
-request in a Debian `forky` container. It installs the build and toolchain
-dependencies via apt, then runs `make build`, `make test`, `make lint`, and
+request in a Debian `forky` container. It bootstraps `make` + git, then runs
+the same `make` tasks an engineer runs locally — `make deps` to install the
+build/toolchain packages, then `make build`, `make test`, `make lint`, and
 `make format-check` — failing the job on any failure (including formatting
-drift).
+drift). The dependency list lives in one place (scripts/setup-deps.sh), shared
+by CI, `make deps`, and `make ci`.
 
 Run the same thing locally before pushing with `make ci` (needs `podman`):
 it copies the repo into a clean `debian:forky` container and runs the same
-`make build test lint format-check` steps, so the local `build/` directory never
-skews the result.
+make tasks, so the local `build/` directory never skews the result.
 
 ## License
 

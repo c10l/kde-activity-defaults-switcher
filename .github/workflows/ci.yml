@@ -12,28 +12,24 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:forky
     steps:
-      - name: Install build and toolchain dependencies
+      # Minimal bootstrap: git needs a CA bundle to do an https checkout; the
+      # full build/toolchain dependency set is installed by `make deps` below,
+      # so it stays in a single place (scripts/setup-deps.sh).
+      - name: Install make, git and CA certificates (for checkout)
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates \
-            build-essential \
-            cmake \
             git \
-            extra-cmake-modules \
-            qt6-base-dev \
-            libkf6service-dev \
-            libkf6config-dev \
-            libkf6coreaddons-dev \
-            libkf6dbusaddons-dev \
-            libplasmaactivities-dev \
-            kded6-dev \
-            clang-format \
-            clang-tidy
+            make
 
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install build and toolchain dependencies
+        run: make deps
+
+      # The same make tasks an engineer runs locally.
       - name: Build
         run: make build
 

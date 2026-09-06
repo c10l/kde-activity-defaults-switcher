@@ -104,19 +104,14 @@ deps:
 
 # Run exactly what the CI workflow runs, locally, in a clean Debian container.
 # The repo is mounted read-only and copied into the container so the local
-# (host-path-embedded) build/ never leaks in and skews the result.
+# (host-path-embedded) build/ never leaks in and skews the result. Delegates
+# to make deps rather than re-listing the package set.
 ci:
 	@command -v $(PODMAN) >/dev/null 2>&1 || \
 		{ echo "error: $(PODMAN) not found in PATH" >&2; exit 1; }
 	$(PODMAN) run --rm -v "$$(pwd):/src:ro" debian:forky bash -c ' \
-		apt-get update -qq && \
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-			ca-certificates \
-			build-essential cmake git extra-cmake-modules qt6-base-dev \
-			libkf6service-dev libkf6config-dev libkf6coreaddons-dev \
-			libkf6dbusaddons-dev libplasmaactivities-dev kded6-dev \
-			clang-format clang-tidy && \
 		cp -r /src /work && cd /work && rm -rf build && \
+		make deps && \
 		make build test lint format-check'
 
 check: lint test
