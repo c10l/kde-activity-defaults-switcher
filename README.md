@@ -115,3 +115,9 @@ deps/      staged KDE dev packages (gitignored)
 Install destinations follow KDE convention via `KDEInstallDirs`: the daemon
 lands in `${KDE_INSTALL_PLUGINDIR}/kf6/kded`; the KCM will get its own rule
 under `${KDE_INSTALL_KCMDIR}` when it lands.
+
+## License
+
+Licensed under the GNU Lesser General Public License, version 3 or later
+([LGPL-3.0-or-later](https://spdx.org/licenses/LGPL-3.0-or-later.html)).
+See [LICENSE](LICENSE) for the full license text.
