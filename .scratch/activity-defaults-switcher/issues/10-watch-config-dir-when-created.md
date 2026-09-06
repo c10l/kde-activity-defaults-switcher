@@ -4,11 +4,15 @@
 
 **Blocked by:** 08 (kded shell tests).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The config directory is watched (or otherwise re-checked) even when absent at construction, so it is picked up once created.
-- [ ] `mimeapps.list`/`kdeglobals` created after startup are watched, and edits to them trigger capture.
-- [ ] Shell tests pin this with injected fakes (per ticket 08).
+- [x] The config directory is watched (or otherwise re-checked) even when absent at construction, so it is picked up once created.
+- [x] `mimeapps.list`/`kdeglobals` created after startup are watched, and edits to them trigger capture.
+- [x] Shell tests pin this with injected fakes (per ticket 08).
+
+### Notes from review of 10
+
+- The commit message's "self-heals across directory deletions/recreations" reads broader than the code guarantees: once the watch is upgraded onto the config directory itself, deleting that directory while the module runs makes `QFileSystemWatcher` silently drop the inotify watch, and no directory event fires on recreation because the nearest ancestor is no longer watched — so the watch is only re-established at the next daemon start. This is out of ticket 10's scope (the ticket is about a config dir absent at *construction*) and practically nil in impact (deleting `~/.config` under a live session breaks the session anyway, and login re-watches). Accepted as deferred; no follow-up ticket.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
