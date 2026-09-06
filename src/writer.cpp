@@ -53,12 +53,9 @@ QStringList mimeKeysFor(Component component)
         };
     case Component::TextEditor:
         return {
-            QStringLiteral("text/plain"),
-            QStringLiteral("text/x-cmake"),
-            QStringLiteral("text/markdown"),
-            QStringLiteral("application/x-docbook+xml"),
-            QStringLiteral("application/json"),
-            QStringLiteral("application/x-yaml"),
+            QStringLiteral("text/plain"),       QStringLiteral("text/x-cmake"),
+            QStringLiteral("text/markdown"),    QStringLiteral("application/x-docbook+xml"),
+            QStringLiteral("application/json"), QStringLiteral("application/x-yaml"),
         };
     case Component::Calendar:
         return {
@@ -70,34 +67,22 @@ QStringList mimeKeysFor(Component component)
         };
     case Component::ImageViewer:
         return {
-            QStringLiteral("image/png"),
-            QStringLiteral("image/jpeg"),
-            QStringLiteral("image/webp"),
-            QStringLiteral("image/avif"),
-            QStringLiteral("image/heif"),
-            QStringLiteral("image/bmp"),
+            QStringLiteral("image/png"),    QStringLiteral("image/jpeg"),
+            QStringLiteral("image/webp"),   QStringLiteral("image/avif"),
+            QStringLiteral("image/heif"),   QStringLiteral("image/bmp"),
             QStringLiteral("image/x-icns"),
         };
     case Component::MusicPlayer:
         return {
-            QStringLiteral("audio/aac"),
-            QStringLiteral("audio/mp4"),
-            QStringLiteral("audio/mpeg"),
-            QStringLiteral("audio/mpegurl"),
-            QStringLiteral("audio/ogg"),
-            QStringLiteral("audio/vnd.rn-realaudio"),
-            QStringLiteral("audio/vorbis"),
-            QStringLiteral("audio/x-flac"),
-            QStringLiteral("audio/x-mp3"),
-            QStringLiteral("audio/x-mpegurl"),
-            QStringLiteral("audio/x-ms-wma"),
-            QStringLiteral("audio/x-musepack"),
-            QStringLiteral("audio/x-oggflac"),
-            QStringLiteral("audio/x-pn-realaudio"),
-            QStringLiteral("audio/x-scpls"),
-            QStringLiteral("audio/x-speex"),
-            QStringLiteral("audio/x-vorbis"),
-            QStringLiteral("audio/x-vorbis+ogg"),
+            QStringLiteral("audio/aac"),       QStringLiteral("audio/mp4"),
+            QStringLiteral("audio/mpeg"),      QStringLiteral("audio/mpegurl"),
+            QStringLiteral("audio/ogg"),       QStringLiteral("audio/vnd.rn-realaudio"),
+            QStringLiteral("audio/vorbis"),    QStringLiteral("audio/x-flac"),
+            QStringLiteral("audio/x-mp3"),     QStringLiteral("audio/x-mpegurl"),
+            QStringLiteral("audio/x-ms-wma"),  QStringLiteral("audio/x-musepack"),
+            QStringLiteral("audio/x-oggflac"), QStringLiteral("audio/x-pn-realaudio"),
+            QStringLiteral("audio/x-scpls"),   QStringLiteral("audio/x-speex"),
+            QStringLiteral("audio/x-vorbis"),  QStringLiteral("audio/x-vorbis+ogg"),
             QStringLiteral("audio/x-wav"),
         };
     case Component::PdfViewer:
@@ -224,8 +209,7 @@ QString primaryMimeTypeFor(Component component)
 
 QMap<Component, Application> readCurrentMimeDefaults()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("mimeapps.list"),
-                                            KConfig::NoGlobals,
+    auto config = KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::NoGlobals,
                                             QStandardPaths::GenericConfigLocation);
     config->reparseConfiguration();
     const KConfigGroup defaultApplications(config, QStringLiteral("Default Applications"));
@@ -235,7 +219,8 @@ QMap<Component, Application> readCurrentMimeDefaults()
         if (component == Component::Terminal) {
             continue; // kdeglobals
         }
-        const QStringList entries = defaultApplications.readXdgListEntry(primaryMimeTypeFor(component));
+        const QStringList entries =
+            defaultApplications.readXdgListEntry(primaryMimeTypeFor(component));
         if (!entries.isEmpty()) {
             defaults.insert(component, entries.first());
         }

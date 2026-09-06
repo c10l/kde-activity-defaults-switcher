@@ -10,18 +10,9 @@ namespace ads {
 QList<Component> allComponents()
 {
     return {
-        Component::Browser,
-        Component::Email,
-        Component::FileManager,
-        Component::TextEditor,
-        Component::Calendar,
-        Component::Geo,
-        Component::ImageViewer,
-        Component::MusicPlayer,
-        Component::PdfViewer,
-        Component::Tel,
-        Component::VideoPlayer,
-        Component::ArchiveManager,
+        Component::Browser,   Component::Email, Component::FileManager, Component::TextEditor,
+        Component::Calendar,  Component::Geo,   Component::ImageViewer, Component::MusicPlayer,
+        Component::PdfViewer, Component::Tel,   Component::VideoPlayer, Component::ArchiveManager,
         Component::Terminal,
     };
 }
@@ -125,16 +116,14 @@ std::optional<Activity> Resolver::selectBaselineActivity(const QList<Activity> &
     return std::nullopt;
 }
 
-QMap<Component, Application> Resolver::resolve(
-    const Activity &currentActivity,
-    const std::optional<Activity> &baselineActivity,
-    const QMap<ActivityId, Profile> &profiles,
-    const QMap<Component, Application> &currentDefaults) const
+QMap<Component, Application>
+Resolver::resolve(const Activity &currentActivity, const std::optional<Activity> &baselineActivity,
+                  const QMap<ActivityId, Profile> &profiles,
+                  const QMap<Component, Application> &currentDefaults) const
 {
     const Profile currentProfile = profiles.value(currentActivity.id);
-    const Profile baselineProfile = baselineActivity.has_value()
-        ? profiles.value(baselineActivity->id)
-        : Profile{};
+    const Profile baselineProfile =
+        baselineActivity.has_value() ? profiles.value(baselineActivity->id) : Profile{};
 
     QMap<Component, Application> decisions;
     for (const Component component : allComponents()) {

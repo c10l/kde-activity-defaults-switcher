@@ -5,12 +5,11 @@
 
 namespace ads {
 
-Switcher::Switcher(std::unique_ptr<Resolver> resolver,
-                   std::unique_ptr<Writer> writer,
+Switcher::Switcher(std::unique_ptr<Resolver> resolver, std::unique_ptr<Writer> writer,
                    std::unique_ptr<ProfileStore> store)
-    : m_resolver(resolver ? std::move(resolver) : std::make_unique<Resolver>())
-    , m_writer(writer ? std::move(writer) : std::make_unique<Writer>())
-    , m_store(store ? std::move(store) : std::make_unique<ProfileStore>())
+    : m_resolver(resolver ? std::move(resolver) : std::make_unique<Resolver>()),
+      m_writer(writer ? std::move(writer) : std::make_unique<Writer>()),
+      m_store(store ? std::move(store) : std::make_unique<ProfileStore>())
 {
 }
 

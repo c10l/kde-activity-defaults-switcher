@@ -20,7 +20,8 @@ namespace {
 
 QByteArray mimeappsContent()
 {
-    QFile f(QStringLiteral("%1/mimeapps.list").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
+    QFile f(
+        QStringLiteral("%1/mimeapps.list").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
     if (!f.open(QIODevice::ReadOnly)) {
         return {};
     }
@@ -29,7 +30,8 @@ QByteArray mimeappsContent()
 
 QByteArray kdeglobalsContent()
 {
-    QFile f(QStringLiteral("%1/kdeglobals").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
+    QFile f(
+        QStringLiteral("%1/kdeglobals").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
     if (!f.open(QIODevice::ReadOnly)) {
         return {};
     }
@@ -83,7 +85,9 @@ void WriterTest::initTestCase()
     for (const QString &id : ids) {
         QFile desktopFile(dataDir() + QStringLiteral("/applications/") + id);
         QVERIFY(desktopFile.open(QIODevice::WriteOnly));
-        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n").arg(id).toUtf8());
+        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n")
+                              .arg(id)
+                              .toUtf8());
         desktopFile.close();
     }
 
@@ -112,8 +116,11 @@ void WriterTest::init()
     // through KConfig::NoGlobals (KApplicationTrader) while other code reads
     // through SimpleConfig, so both shared instances are reparsed.
     QFile::remove(configDir() + QStringLiteral("/mimeapps.list"));
-    KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::NoGlobals, QStandardPaths::GenericConfigLocation)->reparseConfiguration();
-    KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::SimpleConfig)->reparseConfiguration();
+    KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::NoGlobals,
+                              QStandardPaths::GenericConfigLocation)
+        ->reparseConfiguration();
+    KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::SimpleConfig)
+        ->reparseConfiguration();
     QFile::remove(configDir() + QStringLiteral("/kdeglobals"));
     KSharedConfig::openConfig(QStringLiteral("kdeglobals"))->reparseConfiguration();
 }
@@ -235,9 +242,12 @@ void WriterTest::writesEveryMimeComponentToItsPrimaryKey()
         const int written = writer.apply(decisions, {});
 
         QCOMPARE(written, 1);
-        const QString expectedLine = QStringLiteral("%1=%2;").arg(primaryMimeTypeFor(component), app);
-        QVERIFY2(mimeappsContent().contains(expectedLine.toUtf8()),
-                 qPrintable(QStringLiteral("%1 did not write %2").arg(componentKey(component), expectedLine)));
+        const QString expectedLine =
+            QStringLiteral("%1=%2;").arg(primaryMimeTypeFor(component), app);
+        QVERIFY2(
+            mimeappsContent().contains(expectedLine.toUtf8()),
+            qPrintable(
+                QStringLiteral("%1 did not write %2").arg(componentKey(component), expectedLine)));
     }
 }
 
@@ -248,56 +258,36 @@ void WriterTest::mimeKeysMatchSystemSettingsComponentChooser()
     // kcms/componentchooser/components), plus text/html for the browser so
     // .html files and links both follow the activity (user story 1).
     QCOMPARE(mimeKeysFor(Component::Browser),
-             (QStringList{QStringLiteral("text/html"),
-                          QStringLiteral("x-scheme-handler/http"),
+             (QStringList{QStringLiteral("text/html"), QStringLiteral("x-scheme-handler/http"),
                           QStringLiteral("x-scheme-handler/https")}));
     QCOMPARE(mimeKeysFor(Component::Email),
              (QStringList{QStringLiteral("x-scheme-handler/mailto")}));
-    QCOMPARE(mimeKeysFor(Component::FileManager),
-             (QStringList{QStringLiteral("inode/directory")}));
-    QCOMPARE(mimeKeysFor(Component::TextEditor),
-             (QStringList{QStringLiteral("text/plain"),
-                          QStringLiteral("text/x-cmake"),
-                          QStringLiteral("text/markdown"),
-                          QStringLiteral("application/x-docbook+xml"),
-                          QStringLiteral("application/json"),
-                          QStringLiteral("application/x-yaml")}));
-    QCOMPARE(mimeKeysFor(Component::Calendar),
-             (QStringList{QStringLiteral("text/calendar")}));
-    QCOMPARE(mimeKeysFor(Component::Geo),
-             (QStringList{QStringLiteral("x-scheme-handler/geo")}));
+    QCOMPARE(mimeKeysFor(Component::FileManager), (QStringList{QStringLiteral("inode/directory")}));
+    QCOMPARE(
+        mimeKeysFor(Component::TextEditor),
+        (QStringList{QStringLiteral("text/plain"), QStringLiteral("text/x-cmake"),
+                     QStringLiteral("text/markdown"), QStringLiteral("application/x-docbook+xml"),
+                     QStringLiteral("application/json"), QStringLiteral("application/x-yaml")}));
+    QCOMPARE(mimeKeysFor(Component::Calendar), (QStringList{QStringLiteral("text/calendar")}));
+    QCOMPARE(mimeKeysFor(Component::Geo), (QStringList{QStringLiteral("x-scheme-handler/geo")}));
     QCOMPARE(mimeKeysFor(Component::ImageViewer),
-             (QStringList{QStringLiteral("image/png"),
-                          QStringLiteral("image/jpeg"),
-                          QStringLiteral("image/webp"),
-                          QStringLiteral("image/avif"),
-                          QStringLiteral("image/heif"),
-                          QStringLiteral("image/bmp"),
+             (QStringList{QStringLiteral("image/png"), QStringLiteral("image/jpeg"),
+                          QStringLiteral("image/webp"), QStringLiteral("image/avif"),
+                          QStringLiteral("image/heif"), QStringLiteral("image/bmp"),
                           QStringLiteral("image/x-icns")}));
     QCOMPARE(mimeKeysFor(Component::MusicPlayer),
-             (QStringList{QStringLiteral("audio/aac"),
-                          QStringLiteral("audio/mp4"),
-                          QStringLiteral("audio/mpeg"),
-                          QStringLiteral("audio/mpegurl"),
-                          QStringLiteral("audio/ogg"),
-                          QStringLiteral("audio/vnd.rn-realaudio"),
-                          QStringLiteral("audio/vorbis"),
-                          QStringLiteral("audio/x-flac"),
-                          QStringLiteral("audio/x-mp3"),
-                          QStringLiteral("audio/x-mpegurl"),
-                          QStringLiteral("audio/x-ms-wma"),
-                          QStringLiteral("audio/x-musepack"),
-                          QStringLiteral("audio/x-oggflac"),
-                          QStringLiteral("audio/x-pn-realaudio"),
-                          QStringLiteral("audio/x-scpls"),
-                          QStringLiteral("audio/x-speex"),
-                          QStringLiteral("audio/x-vorbis"),
-                          QStringLiteral("audio/x-vorbis+ogg"),
+             (QStringList{QStringLiteral("audio/aac"), QStringLiteral("audio/mp4"),
+                          QStringLiteral("audio/mpeg"), QStringLiteral("audio/mpegurl"),
+                          QStringLiteral("audio/ogg"), QStringLiteral("audio/vnd.rn-realaudio"),
+                          QStringLiteral("audio/vorbis"), QStringLiteral("audio/x-flac"),
+                          QStringLiteral("audio/x-mp3"), QStringLiteral("audio/x-mpegurl"),
+                          QStringLiteral("audio/x-ms-wma"), QStringLiteral("audio/x-musepack"),
+                          QStringLiteral("audio/x-oggflac"), QStringLiteral("audio/x-pn-realaudio"),
+                          QStringLiteral("audio/x-scpls"), QStringLiteral("audio/x-speex"),
+                          QStringLiteral("audio/x-vorbis"), QStringLiteral("audio/x-vorbis+ogg"),
                           QStringLiteral("audio/x-wav")}));
-    QCOMPARE(mimeKeysFor(Component::PdfViewer),
-             (QStringList{QStringLiteral("application/pdf")}));
-    QCOMPARE(mimeKeysFor(Component::Tel),
-             (QStringList{QStringLiteral("x-scheme-handler/tel")}));
+    QCOMPARE(mimeKeysFor(Component::PdfViewer), (QStringList{QStringLiteral("application/pdf")}));
+    QCOMPARE(mimeKeysFor(Component::Tel), (QStringList{QStringLiteral("x-scheme-handler/tel")}));
     QCOMPARE(mimeKeysFor(Component::VideoPlayer),
              (QStringList{QStringLiteral("video/3gp"),
                           QStringLiteral("video/3gpp"),
@@ -461,7 +451,8 @@ void WriterTest::readCurrentDefaultsIncludesTerminalAndMime()
 
     QFile kdeglobals(configDir() + QStringLiteral("/kdeglobals"));
     QVERIFY(kdeglobals.open(QIODevice::WriteOnly));
-    kdeglobals.write("[General]\nTerminalService=org.kde.konsole.desktop\nTerminalApplication=konsole\n");
+    kdeglobals.write(
+        "[General]\nTerminalService=org.kde.konsole.desktop\nTerminalApplication=konsole\n");
     kdeglobals.close();
 
     const auto defaults = readCurrentDefaults();

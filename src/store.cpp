@@ -8,10 +8,7 @@
 
 namespace ads {
 
-ProfileStore::ProfileStore(const QString &fileName)
-    : m_fileName(fileName)
-{
-}
+ProfileStore::ProfileStore(const QString &fileName) : m_fileName(fileName) {}
 
 QMap<ActivityId, Profile> ProfileStore::load() const
 {

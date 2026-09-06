@@ -122,9 +122,7 @@ void ResolverTest::currentBindingWinsOverBaseline()
     const Resolver resolver;
     const auto decisions = resolver.resolve(
         Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        profiles,
-        {});
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, profiles, {});
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("org.kde.falkon.desktop"));
 }
@@ -145,9 +143,7 @@ void ResolverTest::baselineBindingUsedWhenCurrentHasNone()
     const Resolver resolver;
     const auto decisions = resolver.resolve(
         Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        profiles,
-        {});
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, profiles, {});
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("firefox.desktop"));
 }
@@ -164,11 +160,10 @@ void ResolverTest::capturesCurrentDefaultWhenNeitherHasBinding()
     };
 
     const Resolver resolver;
-    const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        profiles,
-        currentDefaults);
+    const auto decisions =
+        resolver.resolve(Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+                         Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
+                         profiles, currentDefaults);
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("chromium.desktop"));
 }
@@ -191,11 +186,10 @@ void ResolverTest::componentsResolveIndependently()
     };
 
     const Resolver resolver;
-    const auto decisions = resolver.resolve(
-        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        profiles,
-        currentDefaults);
+    const auto decisions =
+        resolver.resolve(Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+                         Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
+                         profiles, currentDefaults);
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("work-browser.desktop"));
     QCOMPARE(decisions.value(Component::Email), QStringLiteral("baseline-mail.desktop"));
@@ -214,9 +208,7 @@ void ResolverTest::unknownActivityFallsBackToBaseline()
     const Resolver resolver;
     const auto decisions = resolver.resolve(
         Activity{QStringLiteral("unknown-uuid"), QStringLiteral("DoesNotExist")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        profiles,
-        {});
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, profiles, {});
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("firefox.desktop"));
 }
@@ -233,9 +225,7 @@ void ResolverTest::emptyActivityFallsBackToBaseline()
     const Resolver resolver;
     const auto decisions = resolver.resolve(
         Activity{QStringLiteral(""), QStringLiteral("")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        profiles,
-        {});
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, profiles, {});
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("firefox.desktop"));
 }
@@ -250,9 +240,7 @@ void ResolverTest::emptyProfilesCaptureCurrentDefaults()
     const Resolver resolver;
     const auto decisions = resolver.resolve(
         Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        {},
-        currentDefaults);
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, {}, currentDefaults);
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("chromium.desktop"));
     QCOMPARE(decisions.value(Component::Terminal), QStringLiteral("org.kde.konsole.desktop"));
@@ -263,9 +251,7 @@ void ResolverTest::componentWithNoDecisionIsAbsent()
     const Resolver resolver;
     const auto decisions = resolver.resolve(
         Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        {},
-        {});
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, {}, {});
 
     QVERIFY(!decisions.contains(Component::Browser));
     QVERIFY(decisions.isEmpty());
@@ -280,9 +266,7 @@ void ResolverTest::componentWithoutDecisionAbsentFromNonEmptyResult()
     const Resolver resolver;
     const auto decisions = resolver.resolve(
         Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        {},
-        currentDefaults);
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, {}, currentDefaults);
 
     QCOMPARE(decisions.value(Component::Browser), QStringLiteral("chromium.desktop"));
     QCOMPARE(decisions.size(), 1);
@@ -333,8 +317,9 @@ void ResolverTest::profileExposesBindings()
     const auto bindings = profile.bindings();
 
     QCOMPARE(bindings.size(), 2);
-    const Binding browser = *std::find_if(bindings.begin(), bindings.end(),
-        [](const Binding &b) { return b.component == Component::Browser; });
+    const Binding browser = *std::find_if(bindings.begin(), bindings.end(), [](const Binding &b) {
+        return b.component == Component::Browser;
+    });
     QCOMPARE(browser.application, QStringLiteral("firefox.desktop"));
 }
 

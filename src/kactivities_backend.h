@@ -28,7 +28,7 @@ public:
     QList<Activity> allActivities() const override;
 
 private:
-    QString activityName(const QString &id) const;
+    QString activityName(const QString &id) const override;
 
     KActivities::Consumer *m_consumer = nullptr;
     mutable QHash<QString, KActivities::Info *> m_info;

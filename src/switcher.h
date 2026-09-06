@@ -19,8 +19,7 @@ namespace ads {
 class Switcher
 {
 public:
-    explicit Switcher(std::unique_ptr<Resolver> resolver = {},
-                      std::unique_ptr<Writer> writer = {},
+    explicit Switcher(std::unique_ptr<Resolver> resolver = {}, std::unique_ptr<Writer> writer = {},
                       std::unique_ptr<ProfileStore> store = {});
 
     // Resolves every component for `currentActivity` and applies the result,

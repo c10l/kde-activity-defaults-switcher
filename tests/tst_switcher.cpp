@@ -19,7 +19,8 @@ namespace {
 
 QByteArray mimeappsContent()
 {
-    QFile f(QStringLiteral("%1/mimeapps.list").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
+    QFile f(
+        QStringLiteral("%1/mimeapps.list").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
     if (!f.open(QIODevice::ReadOnly)) {
         return {};
     }
@@ -38,13 +39,15 @@ QString preferredService(const QString &mimeType)
     }
     const int valueStart = at + marker.size();
     const int valueEnd = text.indexOf(QLatin1Char('\n'), valueStart);
-    const QString line = valueEnd < 0 ? text.mid(valueStart) : text.mid(valueStart, valueEnd - valueStart);
+    const QString line =
+        valueEnd < 0 ? text.mid(valueStart) : text.mid(valueStart, valueEnd - valueStart);
     return line.section(QLatin1Char(';'), 0, 0).trimmed();
 }
 
 QByteArray kdeglobalsContent()
 {
-    QFile f(QStringLiteral("%1/kdeglobals").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
+    QFile f(
+        QStringLiteral("%1/kdeglobals").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
     if (!f.open(QIODevice::ReadOnly)) {
         return {};
     }
@@ -63,7 +66,8 @@ QString terminalService()
     }
     const int valueStart = at + marker.size();
     const int valueEnd = text.indexOf(QLatin1Char('\n'), valueStart);
-    const QString line = valueEnd < 0 ? text.mid(valueStart) : text.mid(valueStart, valueEnd - valueStart);
+    const QString line =
+        valueEnd < 0 ? text.mid(valueStart) : text.mid(valueStart, valueEnd - valueStart);
     return line.trimmed();
 }
 
@@ -71,11 +75,10 @@ QString terminalService()
 class FakeResolver : public Resolver
 {
 public:
-    QMap<Component, Application> resolve(
-        const Activity &currentActivity,
-        const std::optional<Activity> &baselineActivity,
-        const QMap<ActivityId, Profile> &profiles,
-        const QMap<Component, Application> &currentDefaults) const override
+    QMap<Component, Application>
+    resolve(const Activity &currentActivity, const std::optional<Activity> &baselineActivity,
+            const QMap<ActivityId, Profile> &profiles,
+            const QMap<Component, Application> &currentDefaults) const override
     {
         ++calls;
         lastCurrent = currentActivity;
@@ -116,10 +119,7 @@ public:
 class FakeStore : public ProfileStore
 {
 public:
-    QMap<ActivityId, Profile> load() const override
-    {
-        return loaded;
-    }
+    QMap<ActivityId, Profile> load() const override { return loaded; }
 
     void save(const QMap<ActivityId, Profile> &profiles) const override
     {
@@ -167,22 +167,22 @@ void SwitcherTest::initTestCase()
     // Install real desktop entries so KApplicationTrader resolves the storage
     // ids exactly as in a live session.
     QDir().mkpath(dataDir() + QStringLiteral("/applications"));
-    for (const QString &id : {QStringLiteral("chromium.desktop"),
-                              QStringLiteral("firefox.desktop"),
-                              QStringLiteral("thunderbird.desktop"),
-                              QStringLiteral("org.kde.kmail2.desktop"),
-                              QStringLiteral("org.kde.kate.desktop"),
-                              QStringLiteral("org.kde.kwrite.desktop")}) {
+    for (const QString &id :
+         {QStringLiteral("chromium.desktop"), QStringLiteral("firefox.desktop"),
+          QStringLiteral("thunderbird.desktop"), QStringLiteral("org.kde.kmail2.desktop"),
+          QStringLiteral("org.kde.kate.desktop"), QStringLiteral("org.kde.kwrite.desktop")}) {
         QFile desktopFile(dataDir() + QStringLiteral("/applications/") + id);
         QVERIFY(desktopFile.open(QIODevice::WriteOnly));
-        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n").arg(id).toUtf8());
+        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n")
+                              .arg(id)
+                              .toUtf8());
         desktopFile.close();
     }
     // The two terminal services the terminal tests switch between. Their Exec
     // values differ from the storage ids so TerminalApplication can be asserted
     // against the real executable name.
-    for (const QString &id : {QStringLiteral("org.kde.konsole.desktop"),
-                              QStringLiteral("org.kde.yakuake.desktop")}) {
+    for (const QString &id :
+         {QStringLiteral("org.kde.konsole.desktop"), QStringLiteral("org.kde.yakuake.desktop")}) {
         QFile desktopFile(dataDir() + QStringLiteral("/applications/") + id);
         QVERIFY(desktopFile.open(QIODevice::WriteOnly));
         desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n")
@@ -207,7 +207,8 @@ void SwitcherTest::init()
     // Each test starts from a clean config: the previous test's mimeapps.list
     // and kdeglobals are removed and the shared config caches re-read.
     QFile::remove(configDir() + QStringLiteral("/mimeapps.list"));
-    KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::SimpleConfig)->reparseConfiguration();
+    KSharedConfig::openConfig(QStringLiteral("mimeapps.list"), KConfig::SimpleConfig)
+        ->reparseConfiguration();
     QFile::remove(configDir() + QStringLiteral("/kdeglobals"));
     KSharedConfig::openConfig(QStringLiteral("kdeglobals"))->reparseConfiguration();
 }
@@ -228,18 +229,18 @@ void SwitcherTest::appliesAllResolvedDecisionsToWriter()
     auto *writerPtr = writer.get();
 
     Switcher switcher(std::move(resolver), std::move(writer));
-    switcher.switchActivity(
-        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        {},
-        {});
+    switcher.switchActivity(Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+                            Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, {},
+                            {});
 
     QCOMPARE(resolverPtr->calls, 1);
     QCOMPARE(writerPtr->calls, 1);
     QCOMPARE(writerPtr->lastDecisions.size(), 3);
     QCOMPARE(writerPtr->lastDecisions.value(Component::Browser), QStringLiteral("firefox.desktop"));
-    QCOMPARE(writerPtr->lastDecisions.value(Component::Email), QStringLiteral("org.kde.kmail.desktop"));
-    QCOMPARE(writerPtr->lastDecisions.value(Component::Terminal), QStringLiteral("org.kde.konsole.desktop"));
+    QCOMPARE(writerPtr->lastDecisions.value(Component::Email),
+             QStringLiteral("org.kde.kmail.desktop"));
+    QCOMPARE(writerPtr->lastDecisions.value(Component::Terminal),
+             QStringLiteral("org.kde.konsole.desktop"));
 }
 
 void SwitcherTest::passesCurrentStateToResolver()
@@ -253,7 +254,8 @@ void SwitcherTest::passesCurrentStateToResolver()
     Profile workProfile;
     workProfile.setBinding(Component::Browser, QStringLiteral("chromium.desktop"));
     const QMap<ActivityId, Profile> profiles{{QStringLiteral("work-uuid"), workProfile}};
-    const QMap<Component, Application> currentDefaults{{Component::Browser, QStringLiteral("firefox.desktop")}};
+    const QMap<Component, Application> currentDefaults{
+        {Component::Browser, QStringLiteral("firefox.desktop")}};
 
     Switcher switcher(std::move(resolver), std::move(writer));
     switcher.switchActivity(current, baseline, profiles, currentDefaults);
@@ -262,9 +264,11 @@ void SwitcherTest::passesCurrentStateToResolver()
     QCOMPARE(resolverPtr->lastCurrent.name, QStringLiteral("Work"));
     QVERIFY(resolverPtr->lastBaseline.has_value());
     QCOMPARE(resolverPtr->lastBaseline->id, QStringLiteral("default-uuid"));
-    QCOMPARE(resolverPtr->lastProfiles.value(QStringLiteral("work-uuid")).bindingFor(Component::Browser),
-             QStringLiteral("chromium.desktop"));
-    QCOMPARE(resolverPtr->lastDefaults.value(Component::Browser), QStringLiteral("firefox.desktop"));
+    QCOMPARE(
+        resolverPtr->lastProfiles.value(QStringLiteral("work-uuid")).bindingFor(Component::Browser),
+        QStringLiteral("chromium.desktop"));
+    QCOMPARE(resolverPtr->lastDefaults.value(Component::Browser),
+             QStringLiteral("firefox.desktop"));
 }
 
 void SwitcherTest::forwardsWriterResult()
@@ -277,9 +281,7 @@ void SwitcherTest::forwardsWriterResult()
     Switcher switcher(std::move(resolver), std::move(writer));
     const int written = switcher.switchActivity(
         Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
-        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")},
-        {},
-        {});
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}, {}, {});
 
     QCOMPARE(written, 1);
 }
@@ -305,7 +307,8 @@ void SwitcherTest::switchingActivityFlipsBrowserDefault()
     QCOMPARE(workWritten, 1);
     QCOMPARE(preferredService(QStringLiteral("text/html")), QStringLiteral("chromium.desktop"));
 
-    const int defaultWritten = switcher.switchActivity(defaultActivity, baselineActivity, profiles, {});
+    const int defaultWritten =
+        switcher.switchActivity(defaultActivity, baselineActivity, profiles, {});
     QCOMPARE(defaultWritten, 1);
     QCOMPARE(preferredService(QStringLiteral("text/html")), QStringLiteral("firefox.desktop"));
 }
@@ -338,14 +341,18 @@ void SwitcherTest::switchingActivityFlipsEveryComponent()
     // Switch to Work: every component flips to Work's binding.
     QCOMPARE(switcher.switchActivity(workActivity, baselineActivity, profiles, {}), 3);
     QCOMPARE(preferredService(QStringLiteral("text/html")), QStringLiteral("chromium.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("x-scheme-handler/mailto")), QStringLiteral("org.kde.kmail2.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("text/plain")), QStringLiteral("org.kde.kate.desktop"));
+    QCOMPARE(preferredService(QStringLiteral("x-scheme-handler/mailto")),
+             QStringLiteral("org.kde.kmail2.desktop"));
+    QCOMPARE(preferredService(QStringLiteral("text/plain")),
+             QStringLiteral("org.kde.kate.desktop"));
 
     // Switch to Default: every component flips to the baseline binding.
     QCOMPARE(switcher.switchActivity(defaultActivity, baselineActivity, profiles, {}), 3);
     QCOMPARE(preferredService(QStringLiteral("text/html")), QStringLiteral("firefox.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("x-scheme-handler/mailto")), QStringLiteral("thunderbird.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("text/plain")), QStringLiteral("org.kde.kwrite.desktop"));
+    QCOMPARE(preferredService(QStringLiteral("x-scheme-handler/mailto")),
+             QStringLiteral("thunderbird.desktop"));
+    QCOMPARE(preferredService(QStringLiteral("text/plain")),
+             QStringLiteral("org.kde.kwrite.desktop"));
 }
 
 void SwitcherTest::fallsBackToBaselineBrowserBinding()
@@ -406,13 +413,16 @@ void SwitcherTest::captureRecordsUserEditAsBindingForCurrentActivity()
     Switcher switcher(std::move(resolver), std::move(writer), std::move(store));
 
     const Activity current{QStringLiteral("work-uuid"), QStringLiteral("Work")};
-    const std::optional<Activity> baseline{Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
+    const std::optional<Activity> baseline{
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
 
     // A switch first establishes the state the switcher last ensured.
-    switcher.switchActivity(current, baseline, {}, {{Component::Browser, QStringLiteral("firefox.desktop")}});
+    switcher.switchActivity(current, baseline, {},
+                            {{Component::Browser, QStringLiteral("firefox.desktop")}});
 
     // The user edits the browser in System Settings while on Work.
-    switcher.captureUserEdits(current, baseline, {}, {{Component::Browser, QStringLiteral("chromium.desktop")}});
+    switcher.captureUserEdits(current, baseline, {},
+                              {{Component::Browser, QStringLiteral("chromium.desktop")}});
 
     // The edit is recorded as a binding for the current activity and persisted.
     QCOMPARE(storePtr->saves, 1);
@@ -420,8 +430,9 @@ void SwitcherTest::captureRecordsUserEditAsBindingForCurrentActivity()
              QStringLiteral("chromium.desktop"));
 
     // The resolver saw the updated profile, not the original one.
-    QCOMPARE(resolverPtr->lastProfiles.value(QStringLiteral("work-uuid")).bindingFor(Component::Browser),
-             QStringLiteral("chromium.desktop"));
+    QCOMPARE(
+        resolverPtr->lastProfiles.value(QStringLiteral("work-uuid")).bindingFor(Component::Browser),
+        QStringLiteral("chromium.desktop"));
 }
 
 void SwitcherTest::captureDoesNotRecordWhenNothingChanged()
@@ -429,13 +440,17 @@ void SwitcherTest::captureDoesNotRecordWhenNothingChanged()
     auto store = std::make_unique<FakeStore>();
     auto *storePtr = store.get();
 
-    Switcher switcher(std::make_unique<FakeResolver>(), std::make_unique<FakeWriter>(), std::move(store));
+    Switcher switcher(std::make_unique<FakeResolver>(), std::make_unique<FakeWriter>(),
+                      std::move(store));
 
     const Activity current{QStringLiteral("work-uuid"), QStringLiteral("Work")};
-    const std::optional<Activity> baseline{Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
+    const std::optional<Activity> baseline{
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
 
-    switcher.switchActivity(current, baseline, {}, {{Component::Browser, QStringLiteral("firefox.desktop")}});
-    const int written = switcher.captureUserEdits(current, baseline, {}, {{Component::Browser, QStringLiteral("firefox.desktop")}});
+    switcher.switchActivity(current, baseline, {},
+                            {{Component::Browser, QStringLiteral("firefox.desktop")}});
+    const int written = switcher.captureUserEdits(
+        current, baseline, {}, {{Component::Browser, QStringLiteral("firefox.desktop")}});
 
     // Nothing changed, so nothing is recorded and nothing is persisted.
     QCOMPARE(storePtr->saves, 0);
@@ -451,7 +466,8 @@ void SwitcherTest::captureIgnoresDaemonsOwnWrite()
     work.setBinding(Component::Browser, QStringLiteral("chromium.desktop"));
     const QMap<ActivityId, Profile> profiles{{QStringLiteral("work-uuid"), work}};
     const Activity current{QStringLiteral("work-uuid"), QStringLiteral("Work")};
-    const std::optional<Activity> baseline{Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
+    const std::optional<Activity> baseline{
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
 
     auto store = std::make_unique<FakeStore>();
     auto *storePtr = store.get();
@@ -460,10 +476,12 @@ void SwitcherTest::captureIgnoresDaemonsOwnWrite()
     Switcher switcher(std::make_unique<Resolver>(), std::move(writer), std::move(store));
 
     // Switch to Work: decision chromium, current default firefox -> written.
-    switcher.switchActivity(current, baseline, profiles, {{Component::Browser, QStringLiteral("firefox.desktop")}});
+    switcher.switchActivity(current, baseline, profiles,
+                            {{Component::Browser, QStringLiteral("firefox.desktop")}});
 
     // The watcher event after the daemon's own write: defaults now chromium.
-    const int written = switcher.captureUserEdits(current, baseline, profiles, {{Component::Browser, QStringLiteral("chromium.desktop")}});
+    const int written = switcher.captureUserEdits(
+        current, baseline, profiles, {{Component::Browser, QStringLiteral("chromium.desktop")}});
 
     // Not a user edit: nothing recorded, and the decision matches the current
     // default so nothing is rewritten either.
@@ -497,8 +515,9 @@ void SwitcherTest::captureDoesNotTreatDaemonsFirstWriteAsUserEdit()
 
     // The daemon's own write lands in the file; the watcher fires and reads
     // the new state (browser now present in mimeapps.list).
-    const int written = switcher.captureUserEdits(workActivity, baselineActivity, profiles,
-                                                  {{Component::Browser, QStringLiteral("firefox.desktop")}});
+    const int written =
+        switcher.captureUserEdits(workActivity, baselineActivity, profiles,
+                                  {{Component::Browser, QStringLiteral("firefox.desktop")}});
 
     // Not a user edit: nothing recorded for Work, and the decision matches the
     // current default so nothing is rewritten either.
@@ -527,11 +546,13 @@ void SwitcherTest::captureRecordsTerminalEditAsBindingForCurrentActivity()
     // changes exactly as the component chooser writes it.
     QFile kdeglobals(configDir() + QStringLiteral("/kdeglobals"));
     QVERIFY(kdeglobals.open(QIODevice::WriteOnly));
-    kdeglobals.write("[General]\nTerminalService=org.kde.yakuake.desktop\nTerminalApplication=yakuake\n");
+    kdeglobals.write(
+        "[General]\nTerminalService=org.kde.yakuake.desktop\nTerminalApplication=yakuake\n");
     kdeglobals.close();
 
-    const int written = switcher.captureUserEdits(workActivity, baselineActivity, profiles,
-                                                  {{Component::Terminal, QStringLiteral("org.kde.yakuake.desktop")}});
+    const int written = switcher.captureUserEdits(
+        workActivity, baselineActivity, profiles,
+        {{Component::Terminal, QStringLiteral("org.kde.yakuake.desktop")}});
 
     // The edit is recorded for the current activity and persisted.
     ProfileStore store;
@@ -568,8 +589,9 @@ void SwitcherTest::captureDoesNotTreatDaemonsTerminalWriteAsUserEdit()
 
     // The daemon's own write lands in the file; the watcher fires and reads
     // the new state (terminal now present in kdeglobals).
-    const int written = switcher.captureUserEdits(workActivity, baselineActivity, profiles,
-                                                  {{Component::Terminal, QStringLiteral("org.kde.konsole.desktop")}});
+    const int written = switcher.captureUserEdits(
+        workActivity, baselineActivity, profiles,
+        {{Component::Terminal, QStringLiteral("org.kde.konsole.desktop")}});
 
     // Not a user edit: nothing recorded for Work, and the decision matches the
     // current default so nothing is rewritten either.
@@ -583,12 +605,15 @@ void SwitcherTest::captureSkipsEmptyDefault()
     auto store = std::make_unique<FakeStore>();
     auto *storePtr = store.get();
 
-    Switcher switcher(std::make_unique<FakeResolver>(), std::make_unique<FakeWriter>(), std::move(store));
+    Switcher switcher(std::make_unique<FakeResolver>(), std::make_unique<FakeWriter>(),
+                      std::move(store));
 
     const Activity current{QStringLiteral("work-uuid"), QStringLiteral("Work")};
-    const std::optional<Activity> baseline{Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
+    const std::optional<Activity> baseline{
+        Activity{QStringLiteral("default-uuid"), QStringLiteral("Default")}};
 
-    switcher.switchActivity(current, baseline, {}, {{Component::Browser, QStringLiteral("firefox.desktop")}});
+    switcher.switchActivity(current, baseline, {},
+                            {{Component::Browser, QStringLiteral("firefox.desktop")}});
 
     // A removed default (empty) is not recorded: resolution re-applies the
     // activity's profile, so the system heals back instead of accumulating
@@ -625,8 +650,9 @@ void SwitcherTest::captureEditRecordsBindingAndFlipsDefault()
                    "x-scheme-handler/https=chromium.desktop;\n");
     mimeapps.close();
 
-    const int written = switcher.captureUserEdits(workActivity, baselineActivity, profiles,
-                                                  {{Component::Browser, QStringLiteral("chromium.desktop")}});
+    const int written =
+        switcher.captureUserEdits(workActivity, baselineActivity, profiles,
+                                  {{Component::Browser, QStringLiteral("chromium.desktop")}});
 
     // The edit is applied (the system default already matches it, so nothing
     // needed rewriting - no churn) ...

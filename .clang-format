@@ -3,18 +3,28 @@
 
 ---
 # clang-format config for activity-defaults-switcher.
-# Matches the existing hand-written style: 4-space indent, Linux brace
-# placement (function/class braces on the next line, control flow on the same
-# line), left-aligned pointers/references.
+# Matches the hand-written style: 4-space indent, Linux-like brace placement
+# (function/class braces on the next line; struct, control-flow, and namespace
+# braces on the same line), right-aligned pointers/references (`Type *ptr`,
+# `const QString &id`), access specifiers at column 0, and a single space
+# before trailing comments rather than column alignment.
 BasedOnStyle: LLVM
 Language: Cpp
 Standard: c++20
 IndentWidth: 4
 TabWidth: 4
+AccessModifierOffset: -4
 UseTab: Never
 ColumnLimit: 100
-BreakBeforeBraces: Linux
-PointerAlignment: Left
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: Never
+  AfterFunction: true
+  AfterNamespace: false
+  AfterStruct: false
+PointerAlignment: Right
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
+AlignTrailingComments: false

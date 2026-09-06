@@ -97,11 +97,10 @@ public:
     // baseline activity's binding, then capture the current default
     // application. A component with none of those is absent from the result.
     // `profiles` is keyed by activity id.
-    virtual QMap<Component, Application> resolve(
-        const Activity &currentActivity,
-        const std::optional<Activity> &baselineActivity,
-        const QMap<ActivityId, Profile> &profiles,
-        const QMap<Component, Application> &currentDefaults) const;
+    virtual QMap<Component, Application>
+    resolve(const Activity &currentActivity, const std::optional<Activity> &baselineActivity,
+            const QMap<ActivityId, Profile> &profiles,
+            const QMap<Component, Application> &currentDefaults) const;
 };
 
 } // namespace ads

@@ -25,23 +25,11 @@ class FakeBackend : public ActivityBackend
     Q_OBJECT
 
 public:
-    explicit FakeBackend(QObject *parent = nullptr)
-        : ActivityBackend(parent)
-    {
-    }
+    explicit FakeBackend(QObject *parent = nullptr) : ActivityBackend(parent) {}
 
-    bool isRunning() const override
-    {
-        return m_running;
-    }
-    QString currentActivityId() const override
-    {
-        return m_currentId;
-    }
-    QList<Activity> allActivities() const override
-    {
-        return m_activities;
-    }
+    bool isRunning() const override { return m_running; }
+    QString currentActivityId() const override { return m_currentId; }
+    QList<Activity> allActivities() const override { return m_activities; }
     QString activityName(const QString &id) const override
     {
         for (const Activity &a : m_activities) {
@@ -69,10 +57,7 @@ public:
         m_activities = activities;
         emit activitiesChanged();
     }
-    void setActivityName(const QString &id, const QString &name)
-    {
-        m_names.insert(id, name);
-    }
+    void setActivityName(const QString &id, const QString &name) { m_names.insert(id, name); }
     // Simulate a user renaming one activity: update the reported name for that
     // id (both in the activity list and the fallback lookup) and emit the
     // rename signal the module is connected to, exactly as KActivities::Info's
@@ -99,11 +84,10 @@ public:
 class FakeResolver : public Resolver
 {
 public:
-    QMap<Component, Application> resolve(
-        const Activity &currentActivity,
-        const std::optional<Activity> &baselineActivity,
-        const QMap<ActivityId, Profile> &profiles,
-        const QMap<Component, Application> &currentDefaults) const override
+    QMap<Component, Application>
+    resolve(const Activity &currentActivity, const std::optional<Activity> &baselineActivity,
+            const QMap<ActivityId, Profile> &profiles,
+            const QMap<Component, Application> &currentDefaults) const override
     {
         ++calls;
         lastCurrent = currentActivity;
@@ -171,7 +155,8 @@ static void writeBrowserDefault(const QString &configDir, const QString &storage
         return;
     }
     const QByteArray body = "[Default Applications]\n"
-                            "x-scheme-handler/http=" + storageId.toUtf8() + ";\n";
+                            "x-scheme-handler/http=" +
+                            storageId.toUtf8() + ";\n";
     f.write(body);
     f.close();
 }
@@ -243,11 +228,9 @@ void ModuleTest::injectsFakesAndNeverTouchesLiveSystem()
 
     // Constructing the module with fakes must succeed headless; no KActivities
     // consumer, D-Bus registration, or live config write happens.
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::make_unique<FakeResolver>(),
-                                          std::make_unique<FakeWriter>(),
-                                          std::make_unique<FakeStore>());
+    ActivityDefaultsSwitcherModule module(
+        nullptr, std::move(backend), std::make_unique<FakeResolver>(),
+        std::make_unique<FakeWriter>(), std::make_unique<FakeStore>());
 }
 
 // Criterion 2: a current-activity change is routed to Switcher::switchActivity,
@@ -271,11 +254,8 @@ void ModuleTest::activityChangeCallsSwitchActivity()
     auto store = std::make_unique<FakeStore>();
     auto *storePtr = store.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
-                                          std::move(writer),
-                                          std::move(store));
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::move(writer), std::move(store));
 
     // Changing the current activity drives the switch path (refresh): the
     // resolver and writer run with the new current activity, and the store is
@@ -308,9 +288,7 @@ void ModuleTest::alreadyRunningAtStartupRefreshesOnce()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
 
@@ -332,9 +310,7 @@ void ModuleTest::serviceStatusRunningTriggersRefresh()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
     QCOMPARE(resolverPtr->calls, 0); // not running: nothing resolved
@@ -358,9 +334,7 @@ void ModuleTest::notRunningDoesNotResolve()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
     QCOMPARE(resolverPtr->calls, 0);
@@ -390,9 +364,7 @@ void ModuleTest::activityChangeResolvesWithCorrectBaseline()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
 
@@ -431,17 +403,16 @@ void ModuleTest::resolverReceivesLoadedProfilesAndCurrentDefaults()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
 
     // Startup (already Running) refresh passed the loaded profile and the read
     // current default into the resolver alongside current/baseline.
     QVERIFY(resolverPtr->calls >= 1);
-    QCOMPARE(resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
-             QStringLiteral("chromium.desktop"));
+    QCOMPARE(
+        resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+        QStringLiteral("chromium.desktop"));
     QCOMPARE(resolverPtr->lastDefaults.value(Component::Browser),
              QStringLiteral("firefox.desktop"));
 }
@@ -464,9 +435,7 @@ void ModuleTest::activityRenameTriggersRefresh()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
 
@@ -501,9 +470,7 @@ void ModuleTest::renamingActivityToDefaultMakesItBaseline()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
 
@@ -535,9 +502,7 @@ void ModuleTest::renamingDefaultAwayFallsBackToAlphabeticalFirst()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
 
@@ -573,9 +538,7 @@ void ModuleTest::transientEmptyNameDoesNotBecomeBaseline()
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(),
                                           std::make_unique<FakeStore>());
     const int callsAtStartup = resolverPtr->calls;
@@ -610,11 +573,8 @@ void ModuleTest::mimeappsChangeCapturesBindingIntoCurrentActivity()
     auto store = std::make_unique<FakeStore>();
     auto *storePtr = store.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
-                                          std::make_unique<FakeWriter>(),
-                                          std::move(store));
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
 
     // A browser default appears (a user picks it) in the watched config file.
     writeBrowserDefault(configDir(), QStringLiteral("chromium.desktop"));
@@ -645,11 +605,8 @@ void ModuleTest::recreatedFileIsReWatchedAndCaptureRuns()
     // Startup refresh sees chromium as the current default.
     writeBrowserDefault(configDir(), QStringLiteral("chromium.desktop"));
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
-                                          std::make_unique<FakeWriter>(),
-                                          std::move(store));
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
 
     // The file is genuinely removed (the watcher path is dropped), then
     // recreated pointing elsewhere - as when the component chooser rewrites it as
@@ -679,11 +636,8 @@ void ModuleTest::rapidChangesCoalesceIntoSingleCapture()
     auto store = std::make_unique<FakeStore>();
     auto *storePtr = store.get();
 
-    ActivityDefaultsSwitcherModule module(nullptr,
-                                          std::move(backend),
-                                          std::move(resolver),
-                                          std::make_unique<FakeWriter>(),
-                                          std::move(store));
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
 
     // Three rapid edits land within the 100 ms coalescing window; only the
     // final (firefox) should be captured.

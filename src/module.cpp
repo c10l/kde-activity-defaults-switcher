@@ -13,9 +13,10 @@
 namespace ads {
 
 // kded6 plugin constructor: runs with the real KActivities-backed backend.
-ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(QObject *parent, const QVariantList &args)
-    : KDEDModule(parent)
-    , m_switcher(std::make_unique<Resolver>(), std::make_unique<Writer>(), std::make_unique<ProfileStore>())
+ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(QObject *parent,
+                                                               const QVariantList &args)
+    : KDEDModule(parent), m_switcher(std::make_unique<Resolver>(), std::make_unique<Writer>(),
+                                     std::make_unique<ProfileStore>())
 {
     Q_UNUSED(args);
     init(std::make_unique<KActivitiesActivityBackend>(this));
@@ -23,13 +24,9 @@ ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(QObject *parent, 
 
 // Testable shell constructor: an injected backend + resolver/writer/store.
 ActivityDefaultsSwitcherModule::ActivityDefaultsSwitcherModule(
-    QObject *parent,
-    std::unique_ptr<ActivityBackend> backend,
-    std::unique_ptr<Resolver> resolver,
-    std::unique_ptr<Writer> writer,
-    std::unique_ptr<ProfileStore> store)
-    : KDEDModule(parent)
-    , m_switcher(std::move(resolver), std::move(writer), std::move(store))
+    QObject *parent, std::unique_ptr<ActivityBackend> backend, std::unique_ptr<Resolver> resolver,
+    std::unique_ptr<Writer> writer, std::unique_ptr<ProfileStore> store)
+    : KDEDModule(parent), m_switcher(std::move(resolver), std::move(writer), std::move(store))
 {
     init(std::move(backend));
 }
@@ -45,7 +42,8 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
     // and both the System Settings component chooser and our writer write these
     // files without it (KApplicationTrader::setPreferredService and the
     // kdeglobals write) - so it would never observe a real edit.
-    const QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    const QString configDir =
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     m_mimeappsPath = configDir + QStringLiteral("/mimeapps.list");
     m_kdeglobalsPath = configDir + QStringLiteral("/kdeglobals");
     if (!configDir.isEmpty() && QFile::exists(configDir)) {
@@ -59,12 +57,9 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
     // processed once the file has settled.
     m_editTimer.setSingleShot(true);
     m_editTimer.setInterval(100);
-    connect(&m_editTimer, &QTimer::timeout, this, [this]() {
-        onDefaultsChanged();
-    });
-    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
-        m_editTimer.start();
-    });
+    connect(&m_editTimer, &QTimer::timeout, this, [this]() { onDefaultsChanged(); });
+    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this,
+            [this](const QString &) { m_editTimer.start(); });
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
         // A directory event can mean a watched config file was created (or
         // recreated after being deleted). Edits to an existing file arrive via
@@ -82,15 +77,10 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
         }
     });
 
-    connect(m_backend.get(), &ActivityBackend::currentActivityChanged, this, [this](const QString &) {
-        refresh();
-    });
-    connect(m_backend.get(), &ActivityBackend::activitiesChanged, this, [this]() {
-        refresh();
-    });
-    connect(m_backend.get(), &ActivityBackend::activitiesRenamed, this, [this]() {
-        refresh();
-    });
+    connect(m_backend.get(), &ActivityBackend::currentActivityChanged, this,
+            [this](const QString &) { refresh(); });
+    connect(m_backend.get(), &ActivityBackend::activitiesChanged, this, [this]() { refresh(); });
+    connect(m_backend.get(), &ActivityBackend::activitiesRenamed, this, [this]() { refresh(); });
     connect(m_backend.get(), &ActivityBackend::runningChanged, this, [this](bool running) {
         if (running) {
             refresh();
@@ -136,7 +126,8 @@ void ActivityDefaultsSwitcherModule::onDefaultsChanged()
     m_switcher.captureUserEdits(current, baseline, m_store.load(), readCurrentDefaults());
 }
 
-QString ActivityDefaultsSwitcherModule::currentName(const QString &id, const QList<Activity> &activities) const
+QString ActivityDefaultsSwitcherModule::currentName(const QString &id,
+                                                    const QList<Activity> &activities) const
 {
     for (const Activity &activity : activities) {
         if (activity.id == id) {
@@ -159,7 +150,8 @@ QString ActivityDefaultsSwitcherModule::currentName(const QString &id, const QLi
 // named "Default", would otherwise be mis-selected as the fallback baseline.
 // A nameless activity is never a valid baseline candidate: its eventual
 // synchronized name is reported via activitiesRenamed and re-resolves then.
-std::optional<Activity> ActivityDefaultsSwitcherModule::selectedBaseline(const QList<Activity> &activities) const
+std::optional<Activity>
+ActivityDefaultsSwitcherModule::selectedBaseline(const QList<Activity> &activities) const
 {
     QList<Activity> named;
     for (const Activity &activity : activities) {

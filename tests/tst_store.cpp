@@ -18,7 +18,8 @@ namespace {
 
 QByteArray storeContent()
 {
-    QFile f(QStringLiteral("%1/activity-defaults-switcherrc").arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
+    QFile f(QStringLiteral("%1/activity-defaults-switcherrc")
+                .arg(QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"))));
     if (!f.open(QIODevice::ReadOnly)) {
         return {};
     }
@@ -54,7 +55,8 @@ void StoreTest::init()
     // Each test starts from a clean config: the previous test's store file is
     // removed and the shared config cache re-read.
     QFile::remove(configDir() + QStringLiteral("/activity-defaults-switcherrc"));
-    KSharedConfig::openConfig(QStringLiteral("activity-defaults-switcherrc"), KConfig::SimpleConfig)->reparseConfiguration();
+    KSharedConfig::openConfig(QStringLiteral("activity-defaults-switcherrc"), KConfig::SimpleConfig)
+        ->reparseConfiguration();
 }
 
 void StoreTest::savesOneGroupPerComponentKeyedByActivityId()

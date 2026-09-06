@@ -43,8 +43,7 @@ public:
     // Testable shell constructor: an injected ActivityBackend replaces the real
     // KActivities backend, and injected resolver/writer/store are threaded into
     // the Switcher so callers observe the glue without real KDE IO.
-    ActivityDefaultsSwitcherModule(QObject *parent,
-                                   std::unique_ptr<ActivityBackend> backend,
+    ActivityDefaultsSwitcherModule(QObject *parent, std::unique_ptr<ActivityBackend> backend,
                                    std::unique_ptr<Resolver> resolver = {},
                                    std::unique_ptr<Writer> writer = {},
                                    std::unique_ptr<ProfileStore> store = {});

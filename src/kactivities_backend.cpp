@@ -8,21 +8,16 @@
 namespace ads {
 
 KActivitiesActivityBackend::KActivitiesActivityBackend(QObject *parent)
-    : ActivityBackend(parent)
-    , m_consumer(new KActivities::Consumer(this))
+    : ActivityBackend(parent), m_consumer(new KActivities::Consumer(this))
 {
     connect(m_consumer, &KActivities::Consumer::serviceStatusChanged, this,
             [this](KActivities::Consumer::ServiceStatus status) {
                 emit runningChanged(status == KActivities::Consumer::Running);
             });
     connect(m_consumer, &KActivities::Consumer::currentActivityChanged, this,
-            [this](const QString &id) {
-                emit currentActivityChanged(id);
-            });
+            [this](const QString &id) { emit currentActivityChanged(id); });
     connect(m_consumer, &KActivities::Consumer::activitiesChanged, this,
-            [this](const QStringList &) {
-                emit activitiesChanged();
-            });
+            [this](const QStringList &) { emit activitiesChanged(); });
 }
 
 KActivitiesActivityBackend::~KActivitiesActivityBackend()
@@ -69,9 +64,8 @@ QString KActivitiesActivityBackend::activityName(const QString &id) const
         // method already mutates the mutable m_info cache, so the const-ness is
         // accessor-only here. The Info is owned for this backend's lifetime.
         auto *self = const_cast<KActivitiesActivityBackend *>(this);
-        QObject::connect(info, &KActivities::Info::nameChanged, self, [self](const QString &) {
-            emit self->activitiesRenamed();
-        });
+        QObject::connect(info, &KActivities::Info::nameChanged, self,
+                         [self](const QString &) { emit self->activitiesRenamed(); });
     }
     return info->name();
 }
