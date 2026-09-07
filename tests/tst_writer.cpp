@@ -273,10 +273,20 @@ void WriterTest::writesEveryMimeComponentToItsPrimaryKey()
 
 void WriterTest::mimeKeysMatchSystemSettingsComponentChooser()
 {
-    // Worked example: each component maps to exactly the mime keys the System
-    // Settings component chooser manages (plasma-workspace,
-    // kcms/componentchooser/components), plus text/html for the browser so
-    // .html files and links both follow the activity (user story 1).
+    // This test pins each component's mime-key list against drift. The lists
+    // were drafted from the System Settings component chooser's entries
+    // (plasma-workspace, kcms/componentchooser/components) and live in
+    // writer.cpp's mimeKeysFor(); the copy asserted here is intentionally
+    // identical to that function's return values, so any accidental change to
+    // them that would silently drop or garble a key the writer applies fails.
+    // This guards writer.cpp against drift; it does not independently verify
+    // the values against an upstream plasma-workspace source, so treat the
+    // lists as a snapshot, not a live check of the component chooser.
+    //
+    // Two deviations from a pure component-chooser copy are deliberate and
+    // pinned here too: the browser also carries text/html so .html files and
+    // links both follow the activity (user story 1), and the terminal has no
+    // mime keys because it is stored in kdeglobals, never mimeapps.list.
     QCOMPARE(mimeKeysFor(Component::Browser),
              (QStringList{QStringLiteral("text/html"), QStringLiteral("x-scheme-handler/http"),
                           QStringLiteral("x-scheme-handler/https")}));
