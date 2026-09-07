@@ -7,11 +7,13 @@
 
 **Blocked by:** 01 (Resolver + domain model).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A resolver test covers `resolve` with `std::nullopt` baseline: the current activity's binding still applies, the baseline is treated as empty, and the current default is captured when no binding exists.
-- [ ] A test (or compile-time guard) asserts every `Component` enum value appears in `allComponents()` and has a non-empty `componentKey()`.
-- [ ] The enum-coverage guard also covers `mimeKeysFor()`/`primaryMimeTypeFor()` for non-terminal components, while the intentional empty terminal keys remain allowed.
+- [x] A resolver test covers `resolve` with `std::nullopt` baseline: the current activity's binding still applies, the baseline is treated as empty, and the current default is captured when no binding exists.
+- [x] A test (or compile-time guard) asserts every `Component` enum value appears in `allComponents()` and has a non-empty `componentKey()`.
+- [x] The enum-coverage guard also covers `mimeKeysFor()`/`primaryMimeTypeFor()` for non-terminal components, while the intentional empty terminal keys remain allowed.
+
+**Note from review of 12:** the runtime guard pins today's 13 members; a brand-new member never referenced anywhere stays invisible to runtime tests. Compile-time hardening tracked in ticket 19.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
