@@ -4,10 +4,10 @@
 
 **Blocked by:** 03 (Writer).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The test comment accurately reflects what the test verifies (pin-against-drift vs verified-against-upstream).
-- [ ] If claiming parity with plasma-workspace, the source is cited/linked and the values are actually checked against it.
+- [x] The test comment accurately reflects what the test verifies (pin-against-drift vs verified-against-upstream).
+- [x] If claiming parity with plasma-workspace, the source is cited/linked and the values are actually checked against it.
 
 **Suggested skills:** `work-ticket`; use `research` if verifying against the upstream plasma-workspace source. `review-ticket` (reviewer).
 
