@@ -33,6 +33,8 @@ private slots:
     void componentWithNoDecisionIsAbsent();
     void componentWithoutDecisionAbsentFromNonEmptyResult();
     void profileExposesBindings();
+    void removeBindingDropsComponentBinding();
+    void isEmptyDistinguishesEmptyAndNonEmptyProfiles();
     void componentKeyIsStableAndUnique();
     void everyEnumValueAppearsInAllComponents();
     void everyEnumValueHasANonEmptyComponentKey();
@@ -406,6 +408,45 @@ void ResolverTest::profileExposesBindings()
         return b.component == Component::Browser;
     });
     QCOMPARE(browser.application, QStringLiteral("firefox.desktop"));
+}
+
+void ResolverTest::removeBindingDropsComponentBinding()
+{
+    // The KCM's "Inherit (baseline: <app>)" clear action (ticket 07) removes a
+    // profile's explicit binding so the component falls back to the baseline
+    // activity. removeBinding drops the component from the profile: it no
+    // longer reports a binding through any public accessor.
+    Profile profile;
+    profile.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
+    profile.setBinding(Component::Terminal, QStringLiteral("org.kde.konsole.desktop"));
+
+    profile.removeBinding(Component::Browser);
+
+    // The removed component has no binding...
+    QVERIFY(!profile.hasBinding(Component::Browser));
+    QVERIFY(!profile.bindingFor(Component::Browser).has_value());
+    // ...while other bindings are untouched.
+    QVERIFY(profile.hasBinding(Component::Terminal));
+    QCOMPARE(profile.bindingFor(Component::Terminal).value(),
+             QStringLiteral("org.kde.konsole.desktop"));
+    // Removing a component that has no binding is a harmless no-op.
+    profile.removeBinding(Component::Email);
+    QVERIFY(!profile.isEmpty());
+}
+
+void ResolverTest::isEmptyDistinguishesEmptyAndNonEmptyProfiles()
+{
+    // The KCM's Reset action (ticket 07) clears an activity's explicit bindings
+    // so it fully falls back to the baseline. A profile that has had every
+    // binding removed reports empty, just like one never populated.
+    Profile empty;
+    QVERIFY(empty.isEmpty());
+
+    empty.setBinding(Component::Email, QStringLiteral("thunderbird.desktop"));
+    QVERIFY(!empty.isEmpty());
+
+    empty.removeBinding(Component::Email);
+    QVERIFY(empty.isEmpty());
 }
 
 QTEST_APPLESS_MAIN(ResolverTest)
