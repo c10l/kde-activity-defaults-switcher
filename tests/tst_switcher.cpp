@@ -162,6 +162,21 @@ private:
     static QString dataDir();
 };
 
+// Installs a desktop entry under the throwaway applications dir so KService
+// and KApplicationTrader resolve its storage id in a live-session manner. QVERIFY
+// belongs to the enclosing test case, so this is set up in initTestCase.
+void installDesktopEntry(const QString &id, const QString &exec)
+{
+    const QString dir = QString::fromLocal8Bit(qgetenv("XDG_DATA_HOME"));
+    QFile desktopFile(QStringLiteral("%1/applications/%2").arg(dir, id));
+    QVERIFY2(desktopFile.open(QIODevice::WriteOnly),
+             qPrintable(QStringLiteral("cannot open desktop entry %1").arg(id)));
+    desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%2\n")
+                          .arg(id, exec)
+                          .toUtf8());
+    desktopFile.close();
+}
+
 void SwitcherTest::initTestCase()
 {
     // Install real desktop entries so KApplicationTrader resolves the storage
@@ -171,24 +186,24 @@ void SwitcherTest::initTestCase()
          {QStringLiteral("chromium.desktop"), QStringLiteral("firefox.desktop"),
           QStringLiteral("thunderbird.desktop"), QStringLiteral("org.kde.kmail2.desktop"),
           QStringLiteral("org.kde.kate.desktop"), QStringLiteral("org.kde.kwrite.desktop")}) {
-        QFile desktopFile(dataDir() + QStringLiteral("/applications/") + id);
-        QVERIFY(desktopFile.open(QIODevice::WriteOnly));
-        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n")
-                              .arg(id)
-                              .toUtf8());
-        desktopFile.close();
+        installDesktopEntry(id, id);
     }
     // The two terminal services the terminal tests switch between. Their Exec
     // values differ from the storage ids so TerminalApplication can be asserted
     // against the real executable name.
-    for (const QString &id :
-         {QStringLiteral("org.kde.konsole.desktop"), QStringLiteral("org.kde.yakuake.desktop")}) {
-        QFile desktopFile(dataDir() + QStringLiteral("/applications/") + id);
-        QVERIFY(desktopFile.open(QIODevice::WriteOnly));
-        desktopFile.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%1\n")
-                              .arg(id.section(QLatin1Char('.'), 2, 2))
-                              .toUtf8());
-        desktopFile.close();
+    installDesktopEntry(QStringLiteral("org.kde.konsole.desktop"), QStringLiteral("konsole"));
+    installDesktopEntry(QStringLiteral("org.kde.yakuake.desktop"), QStringLiteral("yakuake"));
+    // Distinct work/baseline applications for every component so the all-13
+    // switcher test can drive each component's default between two activities.
+    for (const Component component : allComponents()) {
+        if (component == Component::Terminal) {
+            continue; // reuses konsole/yakuake above
+        }
+        const QString key = componentKey(component);
+        installDesktopEntry(QStringLiteral("ads-work-%1.desktop").arg(key),
+                            QStringLiteral("ads-work-%1.desktop").arg(key));
+        installDesktopEntry(QStringLiteral("ads-base-%1.desktop").arg(key),
+                            QStringLiteral("ads-base-%1.desktop").arg(key));
     }
 }
 
@@ -315,18 +330,48 @@ void SwitcherTest::switchingActivityFlipsBrowserDefault()
 
 void SwitcherTest::switchingActivityFlipsEveryComponent()
 {
-    // Acceptance criterion: every component resolves and flips per activity.
-    // Two activities with distinct bindings for several components; each
-    // component's default follows the current activity, then the baseline.
-    Profile work;
-    work.setBinding(Component::Browser, QStringLiteral("chromium.desktop"));
-    work.setBinding(Component::Email, QStringLiteral("org.kde.kmail2.desktop"));
-    work.setBinding(Component::TextEditor, QStringLiteral("org.kde.kate.desktop"));
+    // Acceptance criterion: a switcher-level test drives two activities with
+    // distinct bindings for all 13 components and asserts every component's
+    // default follows the current activity, then the baseline. Where the mime
+    // components resolve through mimeapps.list (asserted at each primary mime
+    // type), the terminal resolves through kdeglobals - both in one scenario.
+    const QMap<Component, QString> workApp = {
+        {Component::Browser, QStringLiteral("ads-work-Browser.desktop")},
+        {Component::Email, QStringLiteral("ads-work-Email.desktop")},
+        {Component::FileManager, QStringLiteral("ads-work-FileManager.desktop")},
+        {Component::TextEditor, QStringLiteral("ads-work-TextEditor.desktop")},
+        {Component::Calendar, QStringLiteral("ads-work-Calendar.desktop")},
+        {Component::Geo, QStringLiteral("ads-work-Geo.desktop")},
+        {Component::ImageViewer, QStringLiteral("ads-work-ImageViewer.desktop")},
+        {Component::MusicPlayer, QStringLiteral("ads-work-MusicPlayer.desktop")},
+        {Component::PdfViewer, QStringLiteral("ads-work-PdfViewer.desktop")},
+        {Component::Tel, QStringLiteral("ads-work-Tel.desktop")},
+        {Component::VideoPlayer, QStringLiteral("ads-work-VideoPlayer.desktop")},
+        {Component::ArchiveManager, QStringLiteral("ads-work-ArchiveManager.desktop")},
+        {Component::Terminal, QStringLiteral("org.kde.yakuake.desktop")},
+    };
+    const QMap<Component, QString> baseApp = {
+        {Component::Browser, QStringLiteral("ads-base-Browser.desktop")},
+        {Component::Email, QStringLiteral("ads-base-Email.desktop")},
+        {Component::FileManager, QStringLiteral("ads-base-FileManager.desktop")},
+        {Component::TextEditor, QStringLiteral("ads-base-TextEditor.desktop")},
+        {Component::Calendar, QStringLiteral("ads-base-Calendar.desktop")},
+        {Component::Geo, QStringLiteral("ads-base-Geo.desktop")},
+        {Component::ImageViewer, QStringLiteral("ads-base-ImageViewer.desktop")},
+        {Component::MusicPlayer, QStringLiteral("ads-base-MusicPlayer.desktop")},
+        {Component::PdfViewer, QStringLiteral("ads-base-PdfViewer.desktop")},
+        {Component::Tel, QStringLiteral("ads-base-Tel.desktop")},
+        {Component::VideoPlayer, QStringLiteral("ads-base-VideoPlayer.desktop")},
+        {Component::ArchiveManager, QStringLiteral("ads-base-ArchiveManager.desktop")},
+        {Component::Terminal, QStringLiteral("org.kde.konsole.desktop")},
+    };
 
+    Profile work;
     Profile baseline;
-    baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
-    baseline.setBinding(Component::Email, QStringLiteral("thunderbird.desktop"));
-    baseline.setBinding(Component::TextEditor, QStringLiteral("org.kde.kwrite.desktop"));
+    for (const Component component : allComponents()) {
+        work.setBinding(component, workApp.value(component));
+        baseline.setBinding(component, baseApp.value(component));
+    }
 
     const QMap<ActivityId, Profile> profiles{
         {QStringLiteral("work-uuid"), work},
@@ -336,23 +381,35 @@ void SwitcherTest::switchingActivityFlipsEveryComponent()
     const Activity defaultActivity{QStringLiteral("default-uuid"), QStringLiteral("Default")};
     const auto baselineActivity = Resolver::selectBaselineActivity({workActivity, defaultActivity});
 
+    // The current default for every component's default, read at the same seam
+    // the writer writes it.
+    const auto currentDefaultFor = [](Component component) {
+        if (component == Component::Terminal) {
+            return terminalService();
+        }
+        return preferredService(primaryMimeTypeFor(component));
+    };
+
     Switcher switcher; // real resolver + real writer
 
     // Switch to Work: every component flips to Work's binding.
-    QCOMPARE(switcher.switchActivity(workActivity, baselineActivity, profiles, {}), 3);
-    QCOMPARE(preferredService(QStringLiteral("text/html")), QStringLiteral("chromium.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("x-scheme-handler/mailto")),
-             QStringLiteral("org.kde.kmail2.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("text/plain")),
-             QStringLiteral("org.kde.kate.desktop"));
+    QCOMPARE(switcher.switchActivity(workActivity, baselineActivity, profiles, {}),
+             static_cast<int>(allComponents().size()));
+    for (const Component component : allComponents()) {
+        QVERIFY2(
+            currentDefaultFor(component) == workApp.value(component),
+            qPrintable(
+                QStringLiteral("%1 did not flip to its work app").arg(componentKey(component))));
+    }
 
-    // Switch to Default: every component flips to the baseline binding.
-    QCOMPARE(switcher.switchActivity(defaultActivity, baselineActivity, profiles, {}), 3);
-    QCOMPARE(preferredService(QStringLiteral("text/html")), QStringLiteral("firefox.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("x-scheme-handler/mailto")),
-             QStringLiteral("thunderbird.desktop"));
-    QCOMPARE(preferredService(QStringLiteral("text/plain")),
-             QStringLiteral("org.kde.kwrite.desktop"));
+    // Switch to Default: every component flips back to the baseline binding.
+    QCOMPARE(switcher.switchActivity(defaultActivity, baselineActivity, profiles, {}),
+             static_cast<int>(allComponents().size()));
+    for (const Component component : allComponents()) {
+        QVERIFY2(currentDefaultFor(component) == baseApp.value(component),
+                 qPrintable(QStringLiteral("%1 did not flip to its baseline app")
+                                .arg(componentKey(component))));
+    }
 }
 
 void SwitcherTest::fallsBackToBaselineBrowserBinding()
