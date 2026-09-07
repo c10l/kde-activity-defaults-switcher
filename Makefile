@@ -104,12 +104,17 @@ deps:
 
 # Run exactly what the CI workflow runs, locally, in a clean Debian container.
 # The repo is mounted read-only and copied into the container so the local
-# (host-path-embedded) build/ never leaks in and skews the result. Delegates
-# to make deps rather than re-listing the package set.
+# (host-path-embedded) build/ never leaks in and skews the result. Mirrors the
+# CI bootstrap step (ca-certificates, git, make) before make deps, since the
+# base debian:forky image has none of them; deps then delegates to
+# scripts/setup-deps.sh rather than re-listing the package set.
 ci:
 	@command -v $(PODMAN) >/dev/null 2>&1 || \
 		{ echo "error: $(PODMAN) not found in PATH" >&2; exit 1; }
 	$(PODMAN) run --rm -v "$$(pwd):/src:ro" debian:forky bash -c ' \
+		export DEBIAN_FRONTEND=noninteractive && \
+		apt-get update && \
+		apt-get install -y --no-install-recommends ca-certificates git make && \
 		cp -r /src /work && cd /work && rm -rf build && \
 		make deps && \
 		make build test lint format-check'
