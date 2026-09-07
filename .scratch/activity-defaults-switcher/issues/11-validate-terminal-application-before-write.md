@@ -4,11 +4,11 @@
 
 **Blocked by:** 06 (Terminal component + baseline fallback) — the terminal write path exists.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A storage id that resolves to no desktop entry does not write an empty `TerminalApplication` (skip the write, or fall back safely).
-- [ ] Valid storage ids still write `TerminalService` and a non-empty `TerminalApplication`.
-- [ ] Writer tests against a temporary config directory pin both behaviours (extend `tests/tst_writer.cpp`).
+- [x] A storage id that resolves to no desktop entry does not write an empty `TerminalApplication` (skip the write, or fall back safely).
+- [x] Valid storage ids still write `TerminalService` and a non-empty `TerminalApplication`.
+- [x] Writer tests against a temporary config directory pin both behaviours (extend `tests/tst_writer.cpp`).
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
