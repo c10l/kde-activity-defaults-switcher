@@ -57,7 +57,7 @@ private slots:
     void writesEveryMimeComponentToItsPrimaryKey();
     void returnsNumberOfComponentsWritten();
     void skipsEmptyApplication();
-    void mimeKeysMatchSystemSettingsComponentChooser();
+    void mimeKeyListsPinAgainstDrift();
     void everyNonTerminalComponentHasMimeKeys();
     void everyNonTerminalComponentHasAPrimaryMimeType();
     void primaryMimeTypeIsTheComponentChooserCanonicalKey();
@@ -271,7 +271,7 @@ void WriterTest::writesEveryMimeComponentToItsPrimaryKey()
     }
 }
 
-void WriterTest::mimeKeysMatchSystemSettingsComponentChooser()
+void WriterTest::mimeKeyListsPinAgainstDrift()
 {
     // This test pins each component's mime-key list against drift. The lists
     // were drafted from the System Settings component chooser's entries
