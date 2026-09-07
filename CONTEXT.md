@@ -34,3 +34,27 @@ _Avoid_: handler, service, program
 **Baseline activity**:
 The activity whose profile supplies fallback bindings when the current activity has no binding for a component. By convention, the activity named "Default"; if none exists, the first activity in the activity list.
 _Avoid_: default activity, fallback activity
+
+## How we talk about the code
+
+**Interface**:
+A set of methods a piece of code provides. Code talks to the outside world (KDE, the profile file, the application list) only through interfaces, so a test can pass in a fake.
+_Avoid_: seam
+
+**Fake**:
+A test stand-in for an interface — a fake activity reader returns a fixed list instead of asking KDE.
+
+**Dependency injection**:
+Passing the outside-world pieces (activity reader, profile store, application lister) into an object as constructor arguments, instead of having the object reach out to them itself.
+
+**Pure function**:
+A function whose result depends only on its arguments — no KDE, D-Bus, or filesystem access. The resolver is one.
+
+**Temporary directory**:
+A throwaway directory a test points at instead of the real config, so tests never write to the user's real configuration.
+
+## Words we do not use
+
+- **seam** — say **interface**. "Seam" is vocabulary for retrofitting testability into legacy code; this is new code.
+- **frontier** — internal vocabulary from an interview method; say "the questions ready to be answered".
+- **grilling** — the name of a skill file, not a way to talk to a person; say "interview", or just ask directly.

@@ -2,7 +2,7 @@
 
 ## Destination
 
-A refined, implementation-ready spec for the KCM ([ticket 07](../activity-defaults-switcher/issues/07-kcm-component.md)): backend interface + roles, QML structure, build wiring, app-enumeration approach, and test seams all locked — so the KCM can afterwards be built as a sequence of small work-ticket slices with nothing left to decide. The spec supersedes ticket 07's design section.
+A refined, implementation-ready spec for the KCM ([ticket 07](../activity-defaults-switcher/issues/07-kcm-component.md)): backend interface + roles, QML structure, build wiring, app-enumeration approach, and testing approach all locked — so the KCM can afterwards be built as a sequence of small work-ticket slices with nothing left to decide. The spec supersedes ticket 07's design section.
 
 ## Notes
 
@@ -15,17 +15,17 @@ A refined, implementation-ready spec for the KCM ([ticket 07](../activity-defaul
 
 - [01: KCM build wiring and the KQuickConfigModule lifecycle](issues/01-kcm-build-wiring-and-kquickconfigmodule-lifecycle.md): `find_package(KF6KCMUtils)` + `kcmutils_add_qml_kcm` (no `KDE_INSTALL_KCMDIR` in KF6); `load/save/defaults` virtuals, `needsSave`, `supportsInstantApply` (default true); new deps `libkf6kcmutils-dev`, `libkf6declarative-dev`, `kirigami2-dev`.
 - [02: App picker enumeration](issues/02-app-picker-enumeration.md): mime via `queryByMimeType` (preference-sorted, `storageId()` is the written value); terminal via `KApplicationTrader::query` filtering `categories() == "TerminalEmulator"` (no `KServiceTypeTrader` in KF6).
+- [03: The C++ backend boundary](issues/03-cpp-backend-boundary.md): C++ thinks, QML draws; one `KcmBackend` QObject + a `QAbstractListModel` of component rows (roles: name, effective app, explicit/fallback/unset, baseline app) + `selectedActivityId`/`baselineActivityId`/`currentActivityId`/`activities`/`hasActivities` properties; activities read via the daemon's `ActivityBackend`/`KActivitiesActivityBackend`, extracted into a shared `ads-activities` library; testing = pure effective-app in `ads-domain`, `ProfileStore` on a temporary directory, `ActivityBackend` + new `ApplicationBackend` as fakes.
 
 ## Not yet specified
 
-- Exact QML model roles / property names — graduates when [03](issues/03-cpp-backend-boundary.md) resolves.
 - KCM string translation (i18n) — in scope, not yet sharp.
-- Whether the KCM surfaces the *current* activity distinctly (ticket 07 only requires the baseline marked) — graduates with 03 and 04.
+- Whether the KCM visually marks the *current* activity (03 exposed `currentActivityId`; ticket 07 only requires the baseline marked) — graduates with 04.
 
 ## Out of scope
 
 - Live refresh (ticket 07: snapshot on open, no live refresh).
 - Free-text storageId in v1 (dynamic enumeration only).
-- Any daemon/resolver/writer change (ticket 16 already delivered the daemon half of ADR-0002).
+- Any daemon/resolver/writer change (ticket 16 already delivered the daemon half of ADR-0002). The `ads-activities` library extraction in [03](issues/03-cpp-backend-boundary.md) is a deliberate exception: build-file-only, no daemon behaviour change.
 - Distribution packaging.
 - Per-mime-type overrides below the component level.
