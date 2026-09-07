@@ -71,8 +71,7 @@ private:
     std::unique_ptr<ActivityBackend> m_backend;
     QFileSystemWatcher m_watcher;
     QTimer m_editTimer; // coalesces rapid file-change events
-    ProfileStore m_store; // loads profiles to feed the switcher
-    Switcher m_switcher;
+    Switcher m_switcher; // owns the ProfileStore both paths share
     QString m_configDir; // the config directory watcher observes
     QString m_configDirWatch; // the path currently watched for config changes
     QString m_mimeappsPath;

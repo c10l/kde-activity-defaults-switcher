@@ -110,7 +110,10 @@ void ActivityDefaultsSwitcherModule::refresh()
     const Activity current{currentId, currentName(currentId, activities)};
     const std::optional<Activity> baseline = selectedBaseline(activities);
 
-    m_switcher.switchActivity(current, baseline, m_store.load(), readCurrentDefaults());
+    // Feed the profiles from the one store the Switcher holds (the same
+    // instance it persists captures through), so a single ProfileStore serves
+    // both the load path here and the save path inside the Switcher.
+    m_switcher.switchActivity(current, baseline, m_switcher.store().load(), readCurrentDefaults());
 }
 
 void ActivityDefaultsSwitcherModule::onDefaultsChanged()
@@ -124,7 +127,8 @@ void ActivityDefaultsSwitcherModule::onDefaultsChanged()
     const Activity current{currentId, currentName(currentId, activities)};
     const std::optional<Activity> baseline = selectedBaseline(activities);
 
-    m_switcher.captureUserEdits(current, baseline, m_store.load(), readCurrentDefaults());
+    m_switcher.captureUserEdits(current, baseline, m_switcher.store().load(),
+                                readCurrentDefaults());
 }
 
 void ActivityDefaultsSwitcherModule::markEditPending(const QString &path)

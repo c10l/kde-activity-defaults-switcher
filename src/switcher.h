@@ -41,6 +41,13 @@ public:
                          const QMap<ActivityId, Profile> &profiles,
                          const QMap<Component, Application> &currentDefaults);
 
+    // The single profile store backing this switcher: the switcher persists
+    // captures through it (save), and the kded module resolves against it by
+    // reading through this accessor, so the module needs no separate store of
+    // its own (one instance serves both the load and save paths).
+    ProfileStore &store() { return *m_store; }
+    const ProfileStore &store() const { return *m_store; }
+
 private:
     int applyAndRemember(const Activity &currentActivity,
                          const std::optional<Activity> &baselineActivity,

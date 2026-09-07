@@ -405,14 +405,8 @@ void ModuleTest::activityChangeResolvesWithCorrectBaseline()
 // real mimeapps.list, then watch both flow into the resolver.
 void ModuleTest::resolverReceivesLoadedProfilesAndCurrentDefaults()
 {
-    // Seed the profile store the module loads from: Work binds the browser to
-    // chromium.
-    Profile work;
-    work.setBinding(Component::Browser, QStringLiteral("chromium.desktop"));
-    ProfileStore(configDir() + QStringLiteral("/activity-defaults-switcherrc"))
-        .save({{QStringLiteral("work-id"), work}});
-    // Seed a current default for the browser that differs from the binding, so
-    // both a profile binding and a current default are visible downstream.
+    // Seed a current default for the browser so both a profile binding and a
+    // current default are visible downstream.
     writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
 
     auto backend = std::make_unique<FakeBackend>();
@@ -421,14 +415,23 @@ void ModuleTest::resolverReceivesLoadedProfilesAndCurrentDefaults()
     backend->setCurrentActivity(QStringLiteral("work-id"));
     auto resolver = std::make_unique<FakeResolver>();
     auto *resolverPtr = resolver.get();
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+    // Seed the profile store the module reads from: Work binds the browser to
+    // chromium. This flows to the module through the injected store's load()
+    // path (ticket 17: the one store serves both load and save).
+    Profile work;
+    work.setBinding(Component::Browser, QStringLiteral("chromium.desktop"));
+    storePtr->loaded = {{QStringLiteral("work-id"), work}};
 
     ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
-                                          std::make_unique<FakeWriter>(),
-                                          std::make_unique<FakeStore>());
+                                          std::make_unique<FakeWriter>(), std::move(store));
 
-    // Startup (already Running) refresh passed the loaded profile and the read
-    // current default into the resolver alongside current/baseline.
+    // Startup (already Running) refresh read the profile through the injected
+    // store and passed it, plus the read current default, into the resolver
+    // alongside current/baseline.
     QVERIFY(resolverPtr->calls >= 1);
+    QVERIFY(storePtr->loads >= 1); // the injected load path is the one the module reads
     QCOMPARE(
         resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
         QStringLiteral("chromium.desktop"));
@@ -737,13 +740,20 @@ void ModuleTest::newlyCreatedStoreIsWatchedAndReapplies()
     const int callsAfterStartup = resolverPtr->calls; // 1, from the startup refresh
 
     // A KCM save creates the store now: the module must notice (via the config
-    // directory watch), add the file to its watcher, and re-apply it.
+    // directory watch), add the file to its watcher, and re-apply it. The KCM
+    // edit's content reaches the re-apply only because it lives in the one
+    // store the module reads (the injected store - ticket 17); the real file
+    // write below is what trips the watcher.
+    Profile workNew;
+    workNew.setBinding(Component::Browser, QStringLiteral("chromium.desktop"));
+    storePtr->loaded = {{QStringLiteral("work-id"), workNew}};
     writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
                       QStringLiteral("chromium.desktop"));
     QTest::qWait(450); // directory watch -> file re-add -> coalescing -> re-apply
 
     QCOMPARE(resolverPtr->calls, callsAfterStartup + 1); // a re-apply happened
     QVERIFY(resolverPtr->calls < callsAfterStartup + 2); // and settled (no loop)
+    QVERIFY(storePtr->loads >= callsAfterStartup + 1); // the re-apply read the store
     QCOMPARE(
         resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
         QStringLiteral("chromium.desktop"));
@@ -780,6 +790,11 @@ void ModuleTest::recreatedStoreIsRewatchedAndReapplies()
 
     writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
                       QStringLiteral("firefox.desktop"));
+    // Reflect the KCM's new content in the store the module reads, so the
+    // re-apply triggered below hands the fresh profile to the resolver.
+    Profile workRecreated;
+    workRecreated.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
+    storePtr->loaded = {{QStringLiteral("work-id"), workRecreated}};
     QTest::qWait(450); // directory watch -> file re-add -> coalescing -> re-apply
 
     // The recreation is re-applied (never captured). File watchers can surface a
@@ -823,7 +838,12 @@ void ModuleTest::storeChangeReappliesNotCaptures()
     const int writesAfterStartup = writerPtr->calls;
 
     // A KCM save rewrites the store (three rapid wrappings coalesce to the final
-    // value). This must re-resolve and apply, and never capture (no store save).
+    // value). The KCM's final content is what the module re-reads from the one
+    // store it shares with the switcher (ticket 17); the real writes below are
+    // what trip the watcher.
+    Profile workChange;
+    workChange.setBinding(Component::Browser, QStringLiteral("konqueror.desktop"));
+    storePtr->loaded = {{QStringLiteral("work-id"), workChange}};
     writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
                       QStringLiteral("opera.desktop"));
     writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
@@ -834,6 +854,7 @@ void ModuleTest::storeChangeReappliesNotCaptures()
 
     // A single coalesced re-apply reached the resolver/writer with the final value.
     QCOMPARE(resolverPtr->calls, callsAfterStartup + 1);
+    QVERIFY(storePtr->loads >= callsAfterStartup + 1); // the re-apply read the store
     QVERIFY(writerPtr->calls >= writesAfterStartup + 1);
     QCOMPARE(
         resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
