@@ -161,6 +161,19 @@ static void writeBrowserDefault(const QString &configDir, const QString &storage
     f.close();
 }
 
+// Writes a binding (activity id -> application) into the real profile store
+// file, the way the KCM (ticket 07) and the module's own capture path persist a
+// profile. Seeding the real store lets the module's loader observe a genuine
+// store change.
+static void writeStoreBinding(const QString &configDir, const QString &activityId,
+                              Component component, const QString &application)
+{
+    Profile work;
+    work.setBinding(component, application);
+    ProfileStore(configDir + QStringLiteral("/activity-defaults-switcherrc"))
+        .save({{activityId, work}});
+}
+
 } // namespace
 
 class ModuleTest : public QObject
@@ -185,6 +198,11 @@ private slots:
     void recreatedFileIsReWatchedAndCaptureRuns();
     void rapidChangesCoalesceIntoSingleCapture();
     void configDirCreatedAfterStartupIsWatchedAndCaptureRuns();
+    // Ticket 16: the daemon watches the profile store so a KCM edit applies live.
+    void newlyCreatedStoreIsWatchedAndReapplies();
+    void recreatedStoreIsRewatchedAndReapplies();
+    void storeChangeReappliesNotCaptures();
+    void storeReapplyDoesNotRecurse();
 
 private:
     QString configDir() const;
@@ -693,6 +711,186 @@ void ModuleTest::configDirCreatedAfterStartupIsWatchedAndCaptureRuns()
 
     // Leave the shared config dir present for the tests that follow.
     QDir().mkpath(configDir());
+}
+
+// Ticket 16 (AC1 + AC2): a profile store that appears only after startup (a
+// KCM save that creates the file) is picked up through the config-directory
+// watch and routed to the re-apply path - the store is re-read and the new
+// profile reaches the resolver, and it is *not* treated as a System Settings
+// edit (nothing is captured/persisted).
+void ModuleTest::newlyCreatedStoreIsWatchedAndReapplies()
+{
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({Activity{QStringLiteral("work-id"), QStringLiteral("Work")}});
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    // No store file exists yet, so at construction the module cannot watch it.
+    QVERIFY(!QFile::exists(configDir() + QStringLiteral("/activity-defaults-switcherrc")));
+
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
+    const int callsAfterStartup = resolverPtr->calls; // 1, from the startup refresh
+
+    // A KCM save creates the store now: the module must notice (via the config
+    // directory watch), add the file to its watcher, and re-apply it.
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("chromium.desktop"));
+    QTest::qWait(450); // directory watch -> file re-add -> coalescing -> re-apply
+
+    QCOMPARE(resolverPtr->calls, callsAfterStartup + 1); // a re-apply happened
+    QVERIFY(resolverPtr->calls < callsAfterStartup + 2); // and settled (no loop)
+    QCOMPARE(
+        resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+        QStringLiteral("chromium.desktop"));
+    QCOMPARE(storePtr->saves, 0); // re-apply, not capture
+}
+
+// Ticket 16 (AC1 + AC2): a profile store that already existed and is later
+// deleted and recreated (like a KCM reset) is re-added to the watcher and the
+// fresh profile re-applied - never captured.
+void ModuleTest::recreatedStoreIsRewatchedAndReapplies()
+{
+    // A store exists before the module starts, so it is watched at construction.
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("chromium.desktop"));
+
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({Activity{QStringLiteral("work-id"), QStringLiteral("Work")}});
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
+    const int callsAfterStartup = resolverPtr->calls; // 1, from the startup refresh
+
+    // Delete the store (dropping the watched path), then recreate it pointing
+    // elsewhere. The recreation must re-add the file and re-apply the new profile.
+    QFile storeFile(configDir() + QStringLiteral("/activity-defaults-switcherrc"));
+    QVERIFY(storeFile.remove());
+    QTest::qWait(300); // let the removal settle (drops the watched path)
+
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("firefox.desktop"));
+    QTest::qWait(450); // directory watch -> file re-add -> coalescing -> re-apply
+
+    // The recreation is re-applied (never captured). File watchers can surface a
+    // delete/recreate cycle as more than one directory event (a rename rewrite
+    // briefly drops and re-adds the path), so at least one re-apply must land and
+    // the final profile be the one that survived.
+    QVERIFY(resolverPtr->calls >= callsAfterStartup + 1);
+    QCOMPARE(
+        resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+        QStringLiteral("firefox.desktop"));
+    QCOMPARE(storePtr->saves, 0);
+}
+
+// Ticket 16 (AC2): a genuine store change (a KCM save) re-resolves and applies
+// through the same refresh path as an activity change - it is never intercepted
+// as a System Settings capture. The re-apply also reflects the coalescing: rapid
+// store edits collapse into a single re-apply of the final profile.
+void ModuleTest::storeChangeReappliesNotCaptures()
+{
+    // Seed a system default that differs from a later-edited profile binding, and
+    // an initial store the module applies at startup.
+    writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("chromium.desktop"));
+
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({Activity{QStringLiteral("work-id"), QStringLiteral("Work")}});
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+    auto writer = std::make_unique<FakeWriter>();
+    auto *writerPtr = writer.get();
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::move(writer), std::move(store));
+    // Startup re-applied chromium over the firefox default.
+    const int callsAfterStartup = resolverPtr->calls;
+    const int writesAfterStartup = writerPtr->calls;
+
+    // A KCM save rewrites the store (three rapid wrappings coalesce to the final
+    // value). This must re-resolve and apply, and never capture (no store save).
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("opera.desktop"));
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("thunderbird.desktop"));
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("konqueror.desktop"));
+    QTest::qWait(450);
+
+    // A single coalesced re-apply reached the resolver/writer with the final value.
+    QCOMPARE(resolverPtr->calls, callsAfterStartup + 1);
+    QVERIFY(writerPtr->calls >= writesAfterStartup + 1);
+    QCOMPARE(
+        resolverPtr->lastProfiles.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+        QStringLiteral("konqueror.desktop"));
+    QCOMPARE(storePtr->saves, 0); // never captured: the store change is not a user edit
+}
+
+// Ticket 16 (AC3): the daemon's own store writes through the capture path do not
+// feed back into a re-apply loop. A store change routes to the re-apply path,
+// which - like an activity change - re-resolves and applies but *never persists*
+// the store, so it cannot trigger the capture that would write the store again.
+// Here a System Settings capture records a binding (one store save); the store
+// change that capture produces (simulated by persisting the recorded binding)
+// yields no further capture and settles rather than re-asserting.
+void ModuleTest::storeReapplyDoesNotRecurse()
+{
+    // Startup sees the default firefox and no bindings, so it re-applies firefox.
+    writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
+
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({Activity{QStringLiteral("work-id"), QStringLiteral("Work")}});
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    auto resolver = std::make_unique<FakeResolver>();
+    auto *resolverPtr = resolver.get();
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
+    const int callsAfterStartup = resolverPtr->calls;
+
+    // A System Settings edit: the browser default becomes opera, which differs
+    // from what the switcher last ensured (firefox), so the capture persists the
+    // new binding into the store. That is the single, legitimate store write.
+    writeBrowserDefault(configDir(), QStringLiteral("opera.desktop"));
+    QTest::qWait(450);
+
+    QCOMPARE(storePtr->saves, 1); // the capture recorded the edit once
+    QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+             QStringLiteral("opera.desktop"));
+
+    // In production that capture writes the store file; the store change it
+    // produces is what this ticket must not let re-assert. Mirror the persisted
+    // binding into the store file and let the resulting store event settle.
+    writeStoreBinding(configDir(), QStringLiteral("work-id"), Component::Browser,
+                      QStringLiteral("opera.desktop"));
+    QTest::qWait(500); // the store change is re-applied once, idempotently
+
+    const int callsAfterStoreFeedback = resolverPtr->calls;
+    // The feedback did not open another capture: the store save count is still 1.
+    QCOMPARE(storePtr->saves, 1);
+    // And once the (single) re-apply lands, the module settles: letting time pass
+    // produces no further store saves or unbounded re-applies.
+    QTest::qWait(600);
+    QCOMPARE(storePtr->saves, 1);
+    QCOMPARE(resolverPtr->calls, callsAfterStoreFeedback);
 }
 
 int main(int argc, char **argv)

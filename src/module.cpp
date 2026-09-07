@@ -35,30 +35,32 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
 {
     m_backend = std::move(backend);
 
-    // Watch mimeapps.list and kdeglobals (and their directory, to notice a
-    // file's creation) so System Settings edits reach the switcher's capture
-    // path. A QFileSystemWatcher is used instead of KConfigWatcher because
-    // KConfigWatcher only fires for writes done with the KConfig Notify flag,
-    // and both the System Settings component chooser and our writer write these
-    // files without it (KApplicationTrader::setPreferredService and the
-    // kdeglobals write) - so it would never observe a real edit.
+    // Watch mimeapps.list, kdeglobals and the profile store (and their
+    // directory, to notice a file's creation) so that System Settings edits and
+    // KCM edits of the profile store reach the switcher. A QFileSystemWatcher is
+    // used instead of KConfigWatcher because KConfigWatcher only fires for writes
+    // done with the KConfig Notify flag, and the System Settings component
+    // chooser, the KCM's ProfileStore, and our writer all write these files
+    // without that flag - so it would never observe a real edit.
     const QString configDir =
         QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     m_configDir = configDir;
     m_mimeappsPath = configDir + QStringLiteral("/mimeapps.list");
     m_kdeglobalsPath = configDir + QStringLiteral("/kdeglobals");
+    m_storePath = configDir + QStringLiteral("/activity-defaults-switcherrc");
     ensureConfigDirectoryWatched();
     ensureConfigWatched(m_mimeappsPath);
     ensureConfigWatched(m_kdeglobalsPath);
+    ensureConfigWatched(m_storePath);
 
     // File-change events can arrive while a config file is still being written
-    // (KConfig truncates and rewrites it), so edits are coalesced and only
-    // processed once the file has settled.
+    // (KConfig truncates and rewrites it), so edits are coalesced and processed
+    // once the file has settled.
     m_editTimer.setSingleShot(true);
     m_editTimer.setInterval(100);
-    connect(&m_editTimer, &QTimer::timeout, this, [this]() { onDefaultsChanged(); });
+    connect(&m_editTimer, &QTimer::timeout, this, [this]() { onEditsSettled(); });
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this,
-            [this](const QString &) { m_editTimer.start(); });
+            [this](const QString &path) { markEditPending(path); });
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
         // A directory event can mean the config directory was just created (or
         // recreated), or that a watched config file was created (or recreated
@@ -68,15 +70,11 @@ void ActivityDefaultsSwitcherModule::init(std::unique_ptr<ActivityBackend> backe
         // watch to the config dir itself the moment it appears, so config files
         // created after startup are still observed.
         ensureConfigDirectoryWatched();
-        bool appeared = false;
-        for (const QString &path : {m_mimeappsPath, m_kdeglobalsPath}) {
+        for (const QString &path : {m_mimeappsPath, m_kdeglobalsPath, m_storePath}) {
             if (!m_watcher.files().contains(path) && QFile::exists(path)) {
                 m_watcher.addPath(path);
-                appeared = true;
+                markEditPending(path);
             }
-        }
-        if (appeared) {
-            m_editTimer.start();
         }
     });
 
@@ -127,6 +125,51 @@ void ActivityDefaultsSwitcherModule::onDefaultsChanged()
     const std::optional<Activity> baseline = selectedBaseline(activities);
 
     m_switcher.captureUserEdits(current, baseline, m_store.load(), readCurrentDefaults());
+}
+
+void ActivityDefaultsSwitcherModule::markEditPending(const QString &path)
+{
+    // A change to a System Settings file (mimeapps.list/kdeglobals) is a user
+    // edit to capture; a change to the profile store (a KCM save, or the
+    // daemon's own capture write) is re-applied. Edits that land while the
+    // coalescing window is open accumulate against the same destination rather
+    // than each being dispatched.
+    if (isStorePath(path)) {
+        m_reapplyPending = true;
+    } else {
+        m_capturePending = true;
+    }
+    m_editTimer.start();
+}
+
+bool ActivityDefaultsSwitcherModule::isStorePath(const QString &path) const
+{
+    return path == m_storePath;
+}
+
+// The one dispatch once the coalescing window settles. Both a System Settings
+// edit and a store change can arrive close together (a capture persists the
+// store in the same moment it re-applies the defaults), so each pending change
+// is handled on the path it belongs to. The store handling goes through the
+// same re-resolve/apply `refresh` used for an activity change, never the
+// capture path, and because `refresh` never writes the store it cannot feed
+// back into another store change - so the daemon's own capture store-write
+// cannot spiral into a re-apply loop (ADR 0002).
+void ActivityDefaultsSwitcherModule::onEditsSettled()
+{
+    const bool capture = m_capturePending;
+    const bool reapply = m_reapplyPending;
+    m_capturePending = false;
+    m_reapplyPending = false;
+
+    if (reapply) {
+        // A genuinely external store change (a KCM save) re-resolves and
+        // applies the current activity against the freshly edited profile.
+        refresh();
+    }
+    if (capture) {
+        onDefaultsChanged();
+    }
 }
 
 QString ActivityDefaultsSwitcherModule::currentName(const QString &id,
