@@ -47,9 +47,11 @@ public:
 
     // Writes each decision to the XDG mime configuration, skipping components
     // whose decision already equals the current default, components without
-    // known mime keys, and empty applications. The terminal component is
-    // written to kdeglobals instead (TerminalService/TerminalApplication,
-    // ADR-0001). Returns the number of components written.
+    // known mime keys, empty applications, and a terminal decision whose storage
+    // id resolves to no desktop entry (which would write an empty
+    // TerminalApplication and break "Open Terminal", ADR-0001). The terminal
+    // component is written to kdeglobals instead (TerminalService/
+    // TerminalApplication, ADR-0001). Returns the number of components written.
     virtual int apply(const QMap<Component, Application> &decisions,
                       const QMap<Component, Application> &currentDefaults) const;
 };

@@ -16,8 +16,11 @@ namespace {
 
 // Writes the terminal binding to kdeglobals (ADR-0001): TerminalService holds
 // the .desktop storage id and TerminalApplication the executable, exactly as
-// the System Settings terminal component chooser writes them.
-void writeTerminal(const Application &application)
+// the System Settings terminal component chooser writes them. Returns false
+// and writes nothing when the storage id resolves to no desktop entry (an
+// empty Exec): an empty TerminalApplication= would break "Open Terminal"
+// (ADR-0001), so the whole write is skipped.
+bool writeTerminal(const Application &application)
 {
     KService::Ptr service = KService::serviceByStorageId(application);
     if (!service) {
@@ -25,11 +28,16 @@ void writeTerminal(const Application &application)
         service = KService::Ptr(new KService(&desktopFile, application));
     }
 
+    if (service->exec().isEmpty()) {
+        return false;
+    }
+
     auto config = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
     KConfigGroup general(config, QStringLiteral("General"));
     general.writeEntry(QStringLiteral("TerminalService"), application);
     general.writeEntry(QStringLiteral("TerminalApplication"), service->exec());
     config->sync();
+    return true;
 }
 
 } // namespace
@@ -263,8 +271,9 @@ int Writer::apply(const QMap<Component, Application> &decisions,
         }
 
         if (component == Component::Terminal) {
-            writeTerminal(application);
-            ++written;
+            if (writeTerminal(application)) {
+                ++written;
+            }
             continue;
         }
 

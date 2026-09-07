@@ -53,6 +53,7 @@ private slots:
     void noOpLeavesExistingConfigUntouched();
     void writesTerminalToKdeglobals();
     void terminalNoOpSkipsRewrite();
+    void invalidTerminalStorageIdWritesNothing();
     void writesEveryMimeComponentToItsPrimaryKey();
     void returnsNumberOfComponentsWritten();
     void skipsEmptyApplication();
@@ -208,6 +209,23 @@ void WriterTest::writesTerminalToKdeglobals()
     QVERIFY(content.contains("TerminalService=org.kde.konsole.desktop"));
     QVERIFY(content.contains("TerminalApplication=konsole"));
     QVERIFY(!QFile::exists(configDir() + QStringLiteral("/mimeapps.list")));
+}
+
+void WriterTest::invalidTerminalStorageIdWritesNothing()
+{
+    // A terminal storage id that resolves to no desktop entry must not write
+    // an empty TerminalApplication= into kdeglobals (that would break "Open
+    // Terminal", ADR-0001). The whole terminal write is skipped, nothing is
+    // written, and the id does not count as a component written.
+    const Writer writer;
+    const QMap<Component, Application> decisions{
+        {Component::Terminal, QStringLiteral("no.such.terminal.desktop")},
+    };
+
+    const int written = writer.apply(decisions, {});
+
+    QCOMPARE(written, 0);
+    QVERIFY(!QFile::exists(configDir() + QStringLiteral("/kdeglobals")));
 }
 
 void WriterTest::terminalNoOpSkipsRewrite()
