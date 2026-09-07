@@ -4,9 +4,9 @@
 
 **Blocked by:** 06 (Terminal component + baseline fallback).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] One switcher test drives two activities with distinct bindings for all 13 components and asserts every component's default follows the current activity, then the baseline.
+- [x] One switcher test drives two activities with distinct bindings for all 13 components and asserts every component's default follows the current activity, then the baseline.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
