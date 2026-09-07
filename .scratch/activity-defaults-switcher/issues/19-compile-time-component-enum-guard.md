@@ -4,11 +4,11 @@
 
 **Blocked by:** 03 (Writer) — spans `src/domain.cpp` and `src/writer.cpp`.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Adding a `Component` enumerator to `src/domain.h` and omitting it from `allComponents()`, `componentKey()`, `mimeKeysFor()`, or `primaryMimeTypeFor()` fails the build rather than silently falling through to the empty return.
-- [ ] The terminal's intentional empty mime keys and primary mime type still compile and behave as today (kdeglobals, ADR-0001).
-- [ ] Existing resolver and writer tests still pass; `make format-check` clean.
+- [x] Adding a `Component` enumerator to `src/domain.h` and omitting it from `allComponents()`, `componentKey()`, `mimeKeysFor()`, or `primaryMimeTypeFor()` fails the build rather than silently falling through to the empty return.
+- [x] The terminal's intentional empty mime keys and primary mime type still compile and behave as today (kdeglobals, ADR-0001).
+- [x] Existing resolver and writer tests still pass; `make format-check` clean.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
