@@ -16,11 +16,11 @@ A refined, implementation-ready spec for the KCM ([ticket 07](../activity-defaul
 - [01: KCM build wiring and the KQuickConfigModule lifecycle](issues/01-kcm-build-wiring-and-kquickconfigmodule-lifecycle.md): `find_package(KF6KCMUtils)` + `kcmutils_add_qml_kcm` (no `KDE_INSTALL_KCMDIR` in KF6); `load/save/defaults` virtuals, `needsSave`, `supportsInstantApply` (default true); new deps `libkf6kcmutils-dev`, `libkf6declarative-dev`, `kirigami2-dev`.
 - [02: App picker enumeration](issues/02-app-picker-enumeration.md): mime via `queryByMimeType` (preference-sorted, `storageId()` is the written value); terminal via `KApplicationTrader::query` filtering `categories() == "TerminalEmulator"` (no `KServiceTypeTrader` in KF6).
 - [03: The C++ backend boundary](issues/03-cpp-backend-boundary.md): C++ thinks, QML draws; one `KcmBackend` QObject + a `QAbstractListModel` of component rows (roles: name, effective app, explicit/fallback/unset, baseline app) + `selectedActivityId`/`baselineActivityId`/`currentActivityId`/`activities`/`hasActivities` properties; activities read via the daemon's `ActivityBackend`/`KActivitiesActivityBackend`, extracted into a shared `ads-activities` library; testing = pure effective-app in `ads-domain`, `ProfileStore` on a temporary directory, `ActivityBackend` + new `ApplicationBackend` as fakes.
+- [04: Effective-app computation and baseline marking](issues/04-effective-app-computation-and-baseline-marking.md): new pure `effectiveBindings(selectedProfile, baselineProfile)` in `ads-domain` (explicit → fallback → unset; never captures) returning a `BindingSource` enum (`Explicit`/`Fallback`/`Unset`) + effective-app + baseline-app; baseline marked via `baselineActivityId`; current activity only defaults the selector, not visually marked.
 
 ## Not yet specified
 
 - KCM string translation (i18n) — in scope, not yet sharp.
-- Whether the KCM visually marks the *current* activity (03 exposed `currentActivityId`; ticket 07 only requires the baseline marked) — graduates with 04.
 
 ## Out of scope
 
