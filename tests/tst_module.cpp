@@ -864,7 +864,6 @@ void ModuleTest::storeReapplyDoesNotRecurse()
 
     ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
                                           std::make_unique<FakeWriter>(), std::move(store));
-    const int callsAfterStartup = resolverPtr->calls;
 
     // A System Settings edit: the browser default becomes opera, which differs
     // from what the switcher last ensured (firefox), so the capture persists the
