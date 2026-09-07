@@ -43,6 +43,19 @@ add_library(ads-writer STATIC src/writer.cpp)
 target_include_directories(ads-writer PUBLIC src)
 target_link_libraries(ads-writer PUBLIC ads-domain KF6::Service KF6::ConfigCore)
 
+# Compile-time enum-coverage guard (ticket 19). ads-domain (componentKey) and
+# ads-writer (mimeKeysFor, primaryMimeTypeFor) switch over the full Component
+# enum with cases that each return and no empty-return default afterwards. A
+# component added to the enum but omitted from one of those switches would
+# otherwise compile as a mere -Wswitch warning and silently skip that
+# component at run time; promote the missing-case warning to an error so the
+# omission fails the build instead. Guarded to GCC/Clang (the CI compiler);
+# MSVC reports a missing case via its own switch-unchecked equivalent.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(ads-domain PRIVATE -Wswitch -Werror=switch)
+    target_compile_options(ads-writer PRIVATE -Wswitch -Werror=switch)
+endif()
+
 add_library(ads-switcher STATIC src/switcher.cpp)
 target_include_directories(ads-switcher PUBLIC src)
 target_link_libraries(ads-switcher PUBLIC ads-domain ads-writer)

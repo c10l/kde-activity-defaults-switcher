@@ -3,18 +3,26 @@
 
 #include "domain.h"
 
+#include <QtGlobal>
+
 #include <algorithm>
 
 namespace ads {
 
 QList<Component> allComponents()
 {
-    return {
-        Component::Browser,   Component::Email, Component::FileManager, Component::TextEditor,
-        Component::Calendar,  Component::Geo,   Component::ImageViewer, Component::MusicPlayer,
-        Component::PdfViewer, Component::Tel,   Component::VideoPlayer, Component::ArchiveManager,
-        Component::Terminal,
-    };
+    // Derived from the enum's contiguous default values over [0, Count): a
+    // component added to the enum above Count is picked up automatically, so
+    // this list cannot silently omit a member the way a hand-maintained
+    // literal could (the very drift ticket 19 exists to prevent). Count itself
+    // is a count sentinel, never a component, and is excluded by the range.
+    QList<Component> components;
+    constexpr int count = static_cast<int>(Component::Count);
+    components.reserve(count);
+    for (int value = 0; value < count; ++value) {
+        components.append(static_cast<Component>(value));
+    }
+    return components;
 }
 
 void Profile::setBinding(Component component, const Application &application)
@@ -85,8 +93,11 @@ QString componentKey(Component component)
         return QStringLiteral("ArchiveManager");
     case Component::Terminal:
         return QStringLiteral("Terminal");
+    case Component::Count:
+        // The trailing count sentinel is never a component.
+        break;
     }
-    return QString();
+    Q_UNREACHABLE();
 }
 
 QList<Activity> orderedActivityList(const QList<Activity> &activities)

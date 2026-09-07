@@ -35,9 +35,17 @@ enum class Component {
     VideoPlayer,
     ArchiveManager,
     Terminal,
+    // Never a real component: a trailing count sentinel one past the last real
+    // member. Its ordinal therefore equals the number of real components, which
+    // lets allComponents() derive the member set from the contiguous range
+    // [Browser, Count) so the two cannot drift (ticket 19). Always add a new
+    // component above this line, never below it.
+    Count,
 };
 
-// Every component, in a stable order.
+// Every component, in a stable order. Derived from the enum's contiguous
+// range below Count (see domain.cpp), so a component added to the enum is
+// always returned here - allComponents() cannot silently miss one.
 QList<Component> allComponents();
 
 // The stable config key for a component (used as the profile store's group

@@ -9,6 +9,7 @@
 #include <KService>
 #include <KSharedConfig>
 #include <QStandardPaths>
+#include <QtGlobal>
 
 namespace ads {
 
@@ -176,8 +177,11 @@ QStringList mimeKeysFor(Component component)
     case Component::Terminal:
         // The terminal lives in kdeglobals, not mimeapps.list.
         return {};
+    case Component::Count:
+        // The trailing count sentinel is never a component.
+        break;
     }
-    return {};
+    Q_UNREACHABLE();
 }
 
 QString primaryMimeTypeFor(Component component)
@@ -211,8 +215,11 @@ QString primaryMimeTypeFor(Component component)
         return QStringLiteral("application/zip");
     case Component::Terminal:
         return QString();
+    case Component::Count:
+        // The trailing count sentinel is never a component.
+        break;
     }
-    return QString();
+    Q_UNREACHABLE();
 }
 
 QMap<Component, Application> readCurrentMimeDefaults()
