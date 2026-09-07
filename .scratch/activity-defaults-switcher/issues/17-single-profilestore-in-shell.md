@@ -6,11 +6,11 @@
 
 **Blocked by:** 06 (Terminal component + baseline fallback — the `Switcher`), 08 (kded shell tests — the module seam).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The module holds exactly one `ProfileStore` instance, used for both `load()` (feeding `refresh()`/`onDefaultsChanged()`) and `save()` (via the `Switcher`), in both the kded constructor and the injected test constructor.
-- [ ] The injected `ProfileStore::load()` is exercised in `tst_module` (the fake store's load path is the one the module reads from), and the by-value `m_store` member is gone.
-- [ ] No behaviour change: `ctest` passes all suites (resolver, writer, switcher, store, module) and the shell suite still never touches the live filesystem/D-Bus.
+- [x] The module holds exactly one `ProfileStore` instance, used for both `load()` (feeding `refresh()`/`onDefaultsChanged()`) and `save()` (via the `Switcher`), in both the kded constructor and the injected test constructor.
+- [x] The injected `ProfileStore::load()` is exercised in `tst_module` (the fake store's load path is the one the module reads from), and the by-value `m_store` member is gone.
+- [x] No behaviour change: `ctest` passes all suites (resolver, writer, switcher, store, module) and the shell suite still never touches the live filesystem/D-Bus.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
