@@ -28,10 +28,14 @@ private slots:
     void unknownActivityFallsBackToBaseline();
     void emptyActivityFallsBackToBaseline();
     void emptyProfilesCaptureCurrentDefaults();
+    void nulloptBaselineStillAppliesCurrentBinding();
+    void nulloptBaselineCapturesCurrentDefaultWhenNoBinding();
     void componentWithNoDecisionIsAbsent();
     void componentWithoutDecisionAbsentFromNonEmptyResult();
     void profileExposesBindings();
     void componentKeyIsStableAndUnique();
+    void everyEnumValueAppearsInAllComponents();
+    void everyEnumValueHasANonEmptyComponentKey();
 };
 
 void ResolverTest::baselineIsDefaultWhenPresent()
@@ -246,6 +250,48 @@ void ResolverTest::emptyProfilesCaptureCurrentDefaults()
     QCOMPARE(decisions.value(Component::Terminal), QStringLiteral("org.kde.konsole.desktop"));
 }
 
+void ResolverTest::nulloptBaselineStillAppliesCurrentBinding()
+{
+    // A missing baseline activity (`std::nullopt` - e.g. an activity list with
+    // no entries) must not drop the current activity's own bindings.
+    Profile work;
+    work.setBinding(Component::Browser, QStringLiteral("org.kde.falkon.desktop"));
+
+    const QMap<QString, Profile> profiles{
+        {QStringLiteral("work-uuid"), work},
+    };
+
+    const Resolver resolver;
+    const auto decisions = resolver.resolve(
+        Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")}, std::nullopt, profiles, {});
+
+    QCOMPARE(decisions.value(Component::Browser), QStringLiteral("org.kde.falkon.desktop"));
+}
+
+void ResolverTest::nulloptBaselineCapturesCurrentDefaultWhenNoBinding()
+{
+    // With no baseline activity the baseline is treated as empty: a component
+    // with no current binding falls all the way through to capturing the
+    // current default - it must NOT be silently dropped, and nothing from a
+    // (now impossible) baseline profile leaks in.
+    Profile work;
+    // No Email binding in the current activity and no baseline to supply one.
+
+    const QMap<QString, Profile> profiles{
+        {QStringLiteral("work-uuid"), work},
+    };
+    const QMap<Component, Application> currentDefaults{
+        {Component::Email, QStringLiteral("org.kde.kmail2.desktop")},
+    };
+
+    const Resolver resolver;
+    const auto decisions =
+        resolver.resolve(Activity{QStringLiteral("work-uuid"), QStringLiteral("Work")},
+                         std::nullopt, profiles, currentDefaults);
+
+    QCOMPARE(decisions.value(Component::Email), QStringLiteral("org.kde.kmail2.desktop"));
+}
+
 void ResolverTest::componentWithNoDecisionIsAbsent()
 {
     const Resolver resolver;
@@ -274,6 +320,21 @@ void ResolverTest::componentWithoutDecisionAbsentFromNonEmptyResult()
         if (component != Component::Browser) {
             QVERIFY(!decisions.contains(component));
         }
+    }
+}
+
+void ResolverTest::everyEnumValueHasANonEmptyComponentKey()
+{
+    // The profile store writes one config group per component keyed by
+    // componentKey(). A new Component whose key falls through to the empty
+    // default would quietly corrupt the store (writing an empty group name), so
+    // every member that allComponents() returns (and thus every member that is
+    // ever resolved or stored) must resolve to a non-empty key.
+    for (const Component component : allComponents()) {
+        QVERIFY2(
+            !componentKey(component).isEmpty(),
+            qPrintable(
+                QStringLiteral("componentKey(%%1) is empty").arg(static_cast<int>(component))));
     }
 }
 
@@ -306,6 +367,30 @@ void ResolverTest::componentKeyIsStableAndUnique()
         QVERIFY(!seen.contains(key)); // unique across components
         seen.insert(key);
     }
+}
+
+void ResolverTest::everyEnumValueAppearsInAllComponents()
+{
+    // allComponents() is the single driver of resolution and of the no-op
+    // writes (Writer iterates it). A Component enum value omitted there is
+    // silently never resolved or applied, so every declared member must appear
+    // - and allComponents() must not invent members that don't exist.
+    const QList<Component> components = allComponents();
+
+    QCOMPARE(components.size(), 13);
+    QVERIFY(components.contains(Component::Browser));
+    QVERIFY(components.contains(Component::Email));
+    QVERIFY(components.contains(Component::FileManager));
+    QVERIFY(components.contains(Component::TextEditor));
+    QVERIFY(components.contains(Component::Calendar));
+    QVERIFY(components.contains(Component::Geo));
+    QVERIFY(components.contains(Component::ImageViewer));
+    QVERIFY(components.contains(Component::MusicPlayer));
+    QVERIFY(components.contains(Component::PdfViewer));
+    QVERIFY(components.contains(Component::Tel));
+    QVERIFY(components.contains(Component::VideoPlayer));
+    QVERIFY(components.contains(Component::ArchiveManager));
+    QVERIFY(components.contains(Component::Terminal));
 }
 
 void ResolverTest::profileExposesBindings()

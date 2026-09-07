@@ -58,6 +58,8 @@ private slots:
     void returnsNumberOfComponentsWritten();
     void skipsEmptyApplication();
     void mimeKeysMatchSystemSettingsComponentChooser();
+    void everyNonTerminalComponentHasMimeKeys();
+    void everyNonTerminalComponentHasAPrimaryMimeType();
     void primaryMimeTypeIsTheComponentChooserCanonicalKey();
     void readCurrentMimeDefaultsReadsPrimaryKeys();
     void readCurrentMimeDefaultsIsEmptyWithoutFile();
@@ -377,6 +379,43 @@ void WriterTest::mimeKeysMatchSystemSettingsComponentChooser()
     // The terminal component has no mime keys: it is stored in kdeglobals,
     // so the writer must never write it to mimeapps.list.
     QVERIFY(mimeKeysFor(Component::Terminal).isEmpty());
+}
+
+void WriterTest::everyNonTerminalComponentHasMimeKeys()
+{
+    // Writer::apply silently skips a component whose mimeKeysFor() is empty
+    // (the `continue`). A non-terminal Component whose keys fell through to the
+    // empty-return default would never flip, silently. So every non-terminal
+    // component that allComponents() drives must map to at least one mime key;
+    // only the terminal (stored in kdeglobals, ADR-0001) is legitimately empty.
+    for (const Component component : allComponents()) {
+        if (component == Component::Terminal) {
+            continue;
+        }
+        QVERIFY2(
+            !mimeKeysFor(component).isEmpty(),
+            qPrintable(QStringLiteral("mimeKeysFor(%%1) is empty").arg(componentKey(component))));
+    }
+    QVERIFY(mimeKeysFor(Component::Terminal).isEmpty());
+}
+
+void WriterTest::everyNonTerminalComponentHasAPrimaryMimeType()
+{
+    // readCurrentMimeDefaults() reads each component through its canonical
+    // primary mime type. A Component whose primaryMimeTypeFor() fell through to
+    // empty would never be read back as a current default - silently missing
+    // from the capture/no-op logic. Every non-terminal component must have one;
+    // the terminal has none (it lives in kdeglobals, ADR-0001).
+    for (const Component component : allComponents()) {
+        if (component == Component::Terminal) {
+            continue;
+        }
+        QVERIFY2(
+            !primaryMimeTypeFor(component).isEmpty(),
+            qPrintable(
+                QStringLiteral("primaryMimeTypeFor(%%1) is empty").arg(componentKey(component))));
+    }
+    QVERIFY(primaryMimeTypeFor(Component::Terminal).isEmpty());
 }
 
 void WriterTest::primaryMimeTypeIsTheComponentChooserCanonicalKey()
