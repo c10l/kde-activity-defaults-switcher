@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 (Resolver + domain model).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `removeBinding` and `isEmpty` are either tested or removed (do one, not both).
-- [ ] If kept, a test pins `removeBinding` (a removed component no longer has a binding) and `isEmpty` (empty vs non-empty profile).
+- [x] `removeBinding` and `isEmpty` are either tested or removed (do one, not both).
+- [x] If kept, a test pins `removeBinding` (a removed component no longer has a binding) and `isEmpty` (empty vs non-empty profile).
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
