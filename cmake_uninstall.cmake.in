@@ -25,6 +25,18 @@ foreach(file ${files})
     if(EXISTS "${path}" OR IS_SYMLINK "${path}")
         message(STATUS "Removing: ${path}")
         file(REMOVE "${path}")
+        # file(REMOVE) does not fail the script when the file cannot be
+        # removed (e.g. the directory is not writable), so verify the removal
+        # actually happened instead of letting `make uninstall` report success
+        # while the installed files remain in place.
+        if(EXISTS "${path}" OR IS_SYMLINK "${path}")
+            message(FATAL_ERROR
+                "Failed to remove: ${path}\n"
+                "The file still exists after file(REMOVE). This usually means "
+                "the install directory is not writable; re-run with sufficient "
+                "privileges (e.g. sudo make uninstall) or set DESTDIR to match "
+                "the staged install.")
+        endif()
     else()
         message(STATUS "Skipping (not found): ${path}")
     endif()
