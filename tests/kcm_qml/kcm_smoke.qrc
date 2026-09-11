@@ -1,0 +1,13 @@
+<!--
+    SPDX-License-Identifier: LGPL-3.0-or-later
+    SPDX-FileCopyrightText: 2026 c10l
+
+    Bundles the production KCM view (kcm/ui/main.qml) under the smoke plugin's
+    resource prefix, exactly as kcmutils_add_qml_kcm does for the real plugin,
+    so KQuickConfigModule::mainUi() loads the same file the shell loads.
+-->
+<RCC>
+    <qresource prefix="/kcm/ads-kcm-smoke">
+        <file alias="main.qml">../../kcm/ui/main.qml</file>
+    </qresource>
+</RCC>

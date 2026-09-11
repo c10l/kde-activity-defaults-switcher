@@ -1,0 +1,8 @@
+{
+    "KPlugin": {
+        "Id": "ads-kcm-smoke",
+        "Name": "Activity Defaults Smoke",
+        "Description": "Offscreen QML smoke-test shell for the Activity Defaults KCM",
+        "Version": "0.1"
+    }
+}

@@ -180,6 +180,60 @@ find_package(KF6KCMUtils QUIET)
 find_package(Qt6 COMPONENTS Qml Quick QUIET)
 if(KF6KCMUtils_FOUND AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
     add_subdirectory(kcm)
+
+    # --- offscreen QML smoke test (ticket 22) ---
+    # tst_kcm pins the KCM's C++ backend; this pins the view (kcm/ui/main.qml)
+    # it renders into, which would otherwise ship untested (a broken id, a wrong
+    # role, an unresolved enum, a delegate error, a mis-selected combo). It
+    # loads the production QML through the real KCMUtils shell: the smoke plugin
+    # (tests/kcm_qml/kcm_smoke_module.cpp) is kcm/kcm.cpp's module with an
+    # injected KcmBackend. A shared support library is the one address space the
+    # test executable and the dlopened plugin both see, so the test hands the
+    # plugin the backend built from its fakes.
+    add_library(ads-kcm-smoke-support SHARED tests/kcm_qml/kcm_smoke_support.cpp)
+    target_include_directories(ads-kcm-smoke-support PUBLIC tests/kcm_qml)
+    target_link_libraries(ads-kcm-smoke-support PUBLIC ads-kcm Qt6::Core)
+
+    # A plain MODULE (not kcoreaddons_add_plugin) so the throwaway test plugin
+    # is not installed; K_PLUGIN_CLASS_WITH_JSON still supplies the Qt plugin
+    # metadata KPluginFactory reads. AUTORCC bundles kcm_smoke.qrc, whose prefix
+    # matches the module's plugin id so KQuickConfigModule::mainUi() finds
+    # main.qml where the real plugin would have it.
+    add_library(ads-kcm-smoke MODULE
+        tests/kcm_qml/kcm_smoke_module.cpp
+        tests/kcm_qml/kcm_smoke.qrc
+    )
+    set_target_properties(ads-kcm-smoke PROPERTIES AUTORCC ON)
+    target_include_directories(ads-kcm-smoke PRIVATE tests/kcm_qml src)
+    target_link_libraries(ads-kcm-smoke PRIVATE
+        ads-kcm-smoke-support
+        ads-kcm
+        KF6::KCMUtilsQuick
+        Qt6::Qml
+        Qt6::Quick
+    )
+
+    add_executable(tst_kcm_qml tests/kcm_qml/tst_kcm_qml.cpp)
+    target_include_directories(tst_kcm_qml PRIVATE tests/kcm_qml)
+    target_compile_definitions(tst_kcm_qml PRIVATE
+        ADS_KCM_SMOKE_PLUGIN="$<TARGET_FILE:ads-kcm-smoke>")
+    # The plugin is dlopened at run time, so nothing links it into the test;
+    # make building the test build (and place) the plugin it loads.
+    add_dependencies(tst_kcm_qml ads-kcm-smoke)
+    target_link_libraries(tst_kcm_qml PRIVATE
+        ads-kcm-smoke-support
+        ads-kcm
+        ads-store
+        ads-activities
+        ads-writer
+        ads-domain
+        KF6::KCMUtilsQuick
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        Qt6::Test
+    )
+    add_test(NAME kcm-qml COMMAND tst_kcm_qml)
 endif()
 
 # Install the KCM's translations: KI18N_INSTALL compiles po/<lang>/<catalog>.po

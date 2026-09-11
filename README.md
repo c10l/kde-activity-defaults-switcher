@@ -105,16 +105,17 @@ make build BUILD_DIR=build-ninja CMAKE_FLAGS="-G Ninja"
 
 ```
 src/       shared domain (resolver, profile, store, writer), the kded6
-           module, and the KCM (in progress)
-tests/     Qt Test suites (resolver, writer, switcher, store, module)
+           module, and the KCM
+tests/     Qt Test suites (resolver, writer, switcher, store, module, kcm,
+           and an offscreen KCM QML smoke test under tests/kcm_qml/)
 docs/adr/  architecture decision records
 scripts/   setup-deps.sh (installs the KDE dev packages via apt)
 build/     out-of-source CMake build directory (gitignored)
 ```
 
 Install destinations follow KDE convention via `KDEInstallDirs`: the daemon
-lands in `${KDE_INSTALL_PLUGINDIR}/kf6/kded`; the KCM will get its own rule
-under `${KDE_INSTALL_KCMDIR}` when it lands.
+lands in `${KDE_INSTALL_PLUGINDIR}/kf6/kded`; the KCM lands under
+`${KDE_INSTALL_KCMDIR}`.
 
 ## CI
 
