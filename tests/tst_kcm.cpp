@@ -128,6 +128,8 @@ private slots:
     void inheritEntryNamesTheBaselineApplication();
     void inheritEntryIsPlainWithoutBaselineBinding();
     void pickerForTerminalUsesTheTerminalEmulatorList();
+    void pickerOffersNonEnumeratedExplicitBinding();
+    void pickerOffersNonEnumeratedFallbackBinding();
 
 private:
     static QString configDir();
@@ -677,6 +679,86 @@ void KcmTest::inheritEntryIsPlainWithoutBaselineBinding()
     QCOMPARE(entries.at(0).toMap().value(QStringLiteral("displayName")).toString(),
              QStringLiteral("Inherit"));
     QCOMPARE(entries.at(0).toMap().value(QStringLiteral("isInheritEntry")).toBool(), true);
+}
+
+void KcmTest::pickerOffersNonEnumeratedExplicitBinding()
+{
+    // A binding to an Application that is no longer enumerated (e.g. no longer
+    // installed) must still be offered, so the picker can show it as the row's
+    // effective app instead of falling back to the Inherit entry.
+    Profile work;
+    work.setBinding(Component::Browser, QStringLiteral("gone.desktop"));
+
+    auto store = std::make_unique<FakeStore>();
+    store->loaded = {{QStringLiteral("work-id"), work}};
+
+    auto applications = std::make_unique<FakeApplicationBackend>();
+    applications->candidates.insert(
+        Component::Browser,
+        {ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox")}});
+    applications->names.insert(QStringLiteral("gone.desktop"), QStringLiteral("Gone Browser"));
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::move(applications), std::move(store));
+    backend.load();
+
+    const QVariantList entries = backend.pickerEntries(static_cast<int>(Component::Browser));
+    QCOMPARE(entries.at(0).toMap().value(QStringLiteral("isInheritEntry")).toBool(), true);
+
+    bool found = false;
+    for (const QVariant &entry : entries) {
+        if (entry.toMap().value(QStringLiteral("storageId")).toString() ==
+            QStringLiteral("gone.desktop")) {
+            found = true;
+            QCOMPARE(entry.toMap().value(QStringLiteral("displayName")).toString(),
+                     QStringLiteral("Gone Browser"));
+            QCOMPARE(entry.toMap().value(QStringLiteral("isInheritEntry")).toBool(), false);
+        }
+    }
+    QVERIFY(found);
+}
+
+void KcmTest::pickerOffersNonEnumeratedFallbackBinding()
+{
+    // A fallback binding to an Application that is not enumerated must be
+    // offered just like the explicit case.
+    Profile baseline;
+    baseline.setBinding(Component::Browser, QStringLiteral("gone.desktop"));
+
+    auto store = std::make_unique<FakeStore>();
+    store->loaded = {{QStringLiteral("default-id"), baseline}};
+
+    auto applications = std::make_unique<FakeApplicationBackend>();
+    applications->candidates.insert(
+        Component::Browser,
+        {ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox")}});
+    applications->names.insert(QStringLiteral("gone.desktop"), QStringLiteral("Gone Browser"));
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {
+        Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-id"), QStringLiteral("Default")},
+    };
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::move(applications), std::move(store));
+    backend.load();
+
+    const QVariantList entries = backend.pickerEntries(static_cast<int>(Component::Browser));
+
+    bool found = false;
+    for (const QVariant &entry : entries) {
+        if (entry.toMap().value(QStringLiteral("storageId")).toString() ==
+            QStringLiteral("gone.desktop")) {
+            found = true;
+            QCOMPARE(entry.toMap().value(QStringLiteral("displayName")).toString(),
+                     QStringLiteral("Gone Browser"));
+        }
+    }
+    QVERIFY(found);
 }
 
 void KcmTest::pickerForTerminalUsesTheTerminalEmulatorList()

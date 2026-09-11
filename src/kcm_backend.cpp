@@ -10,6 +10,8 @@
 
 #include <QVariantMap>
 
+#include <algorithm>
+
 namespace ads {
 
 KcmBackend::KcmBackend(std::unique_ptr<ActivityBackend> activityBackend,
@@ -138,7 +140,25 @@ QVariantList KcmBackend::pickerEntries(int component) const
         return entries;
     }
 
-    const QList<ApplicationCandidate> candidates = m_applicationBackend->applicationsFor(selected);
+    QList<ApplicationCandidate> candidates = m_applicationBackend->applicationsFor(selected);
+
+    // A binding's Application may be absent from the enumerated candidates —
+    // most visibly when it is no longer installed. Offer it anyway (after the
+    // enumerated ones) so the picker can show it as the row's effective app
+    // instead of falling back to the Inherit entry (ticket 21).
+    const std::optional<Application> effective =
+        effectiveBindings(selectedProfile(), baselineProfile()).value(selected).application;
+    if (effective.has_value()) {
+        const bool enumerated = std::any_of(candidates.cbegin(), candidates.cend(),
+                                            [&effective](const ApplicationCandidate &candidate) {
+                                                return candidate.storageId == *effective;
+                                            });
+        if (!enumerated) {
+            candidates.append(
+                ApplicationCandidate{*effective, m_applicationBackend->displayNameFor(*effective)});
+        }
+    }
+
     entries.reserve(candidates.size() + 1);
     for (const ApplicationCandidate &candidate : candidates) {
         entries.append(QVariantMap{{QStringLiteral("storageId"), candidate.storageId},
