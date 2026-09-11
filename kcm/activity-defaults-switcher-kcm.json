@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Name": "Activity Defaults",
+        "Description": "Choose per-activity default applications",
+        "Icon": "preferences-desktop-default-applications",
+        "Version": "0.1"
+    },
+    "X-KDE-System-Settings-Parent-Category": "applications",
+    "X-KDE-Keywords": "activity,default,application,browser,terminal,profile"
+}

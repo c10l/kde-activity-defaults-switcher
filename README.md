@@ -21,8 +21,8 @@ the single source of truth shared by both parts:
   the terminal) whenever the Activity changes, a System Settings default is
   edited, or the profile store changes. Every application — native or Flatpak —
   resolves through those files, so one write point covers both.
-- The **KCM** (in progress) reads and writes the profile store directly and
-  stays a dumb editor; the daemon watches the store and applies edits live
+- The **KCM** reads and writes the profile store directly and stays a dumb
+  editor; the daemon watches the store and applies edits live
   (see [ADR-0002](docs/adr/0002-kcm-writes-profile-store-daemon-watches.md)).
 
 See the repository glossary (`CONTEXT.md`) for the domain vocabulary and
@@ -36,7 +36,8 @@ See the repository glossary (`CONTEXT.md`) for the domain vocabulary and
 - Qt 6 (`Core`, `Test`, QML)
 - KF6 (`Service`, `Config`, `CoreAddons`)
 - For the kded6 module: KF6 `DBusAddons` and Plasma Activities **dev** packages
-- For the KCM: KF6 `KCMUtils` and `KDeclarative` **dev** packages
+- For the KCM: KF6 `KCMUtils`, `KDeclarative` and `I18n` **dev** packages,
+  plus the Kirigami QML modules
 
 `make deps` (via `scripts/setup-deps.sh`) installs the required KF6 / Plasma /
 Qt6 dev packages system-wide with apt — the same set the CI workflow

@@ -25,8 +25,16 @@ pkgs=(
     libkf6config-dev
     libkf6coreaddons-dev
     libkf6dbusaddons-dev
+    libkf6i18n-dev
     libplasmaactivities-dev
     kded6-dev
+    # KCM (System Settings module): KQuickConfigModule, the QML KCM helper and
+    # the Kirigami QML modules the view uses.
+    libkf6kcmutils-dev
+    libkf6declarative-dev
+    libkirigami-dev
+    # Builds the po -> mo catalogs (msgfmt) that ki18n_install() installs.
+    gettext
     clang-format
     clang-tidy
 )

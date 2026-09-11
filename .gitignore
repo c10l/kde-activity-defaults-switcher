@@ -1,1 +1,5 @@
 build/
+# Local build variants (e.g. build-dev) used for out-of-tree verification.
+/build*/
+# Temporary file written by Messages.sh during string extraction.
+rc.cpp

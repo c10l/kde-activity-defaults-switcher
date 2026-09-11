@@ -38,6 +38,15 @@ private slots:
     void componentKeyIsStableAndUnique();
     void everyEnumValueAppearsInAllComponents();
     void everyEnumValueHasANonEmptyComponentKey();
+
+    // effectiveBindings: the KCM's configured-only view (tickets 04, 07).
+    void effectiveBindingIsExplicitWhenSelectedHasBinding();
+    void effectiveBindingIsFallbackWhenOnlyBaselineHasBinding();
+    void effectiveBindingIsUnsetWhenNeitherHasBinding();
+    void effectiveBindingWithEmptyBaselineIsUnset();
+    void effectiveBindingReportsTheBaselineApplication();
+    void effectiveBindingsIncludesEveryComponent();
+    void effectiveBindingNeverCapturesACurrentDefault();
 };
 
 void ResolverTest::baselineIsDefaultWhenPresent()
@@ -447,6 +456,101 @@ void ResolverTest::isEmptyDistinguishesEmptyAndNonEmptyProfiles()
 
     empty.removeBinding(Component::Email);
     QVERIFY(empty.isEmpty());
+}
+
+// The KCM's per-component view is its own resolution order: an explicit binding
+// on the selected activity, else the baseline activity's binding marked as a
+// fallback, else unset. Unlike Resolver::resolve it never captures the current
+// default (ticket 04) - the KCM edits profiles, it does not establish them.
+void ResolverTest::effectiveBindingIsExplicitWhenSelectedHasBinding()
+{
+    Profile work;
+    work.setBinding(Component::Browser, QStringLiteral("org.kde.falkon.desktop"));
+
+    Profile baseline;
+    baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
+
+    const auto effective = effectiveBindings(work, baseline);
+
+    QCOMPARE(effective.value(Component::Browser).application,
+             std::optional<Application>(QStringLiteral("org.kde.falkon.desktop")));
+    QCOMPARE(effective.value(Component::Browser).source, BindingSource::Explicit);
+    // The baseline binding is still reported alongside, for the fallback label.
+    QCOMPARE(effective.value(Component::Browser).baselineApplication,
+             std::optional<Application>(QStringLiteral("firefox.desktop")));
+}
+
+void ResolverTest::effectiveBindingIsFallbackWhenOnlyBaselineHasBinding()
+{
+    Profile work;
+    // No browser binding on this activity.
+
+    Profile baseline;
+    baseline.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
+
+    const auto effective = effectiveBindings(work, baseline);
+
+    QCOMPARE(effective.value(Component::Browser).application,
+             std::optional<Application>(QStringLiteral("firefox.desktop")));
+    QCOMPARE(effective.value(Component::Browser).source, BindingSource::Fallback);
+    QCOMPARE(effective.value(Component::Browser).baselineApplication,
+             std::optional<Application>(QStringLiteral("firefox.desktop")));
+}
+
+void ResolverTest::effectiveBindingIsUnsetWhenNeitherHasBinding()
+{
+    const auto effective = effectiveBindings(Profile{}, Profile{});
+
+    QVERIFY(!effective.value(Component::Browser).application.has_value());
+    QCOMPARE(effective.value(Component::Browser).source, BindingSource::Unset);
+    QVERIFY(!effective.value(Component::Browser).baselineApplication.has_value());
+}
+
+void ResolverTest::effectiveBindingWithEmptyBaselineIsUnset()
+{
+    // No baseline activity (empty profile): a component with no explicit
+    // binding is unset - the KCM never falls through to a current default.
+    Profile work;
+    work.setBinding(Component::Email, QStringLiteral("org.kde.kmail2.desktop"));
+
+    const auto effective = effectiveBindings(work, Profile{});
+
+    QCOMPARE(effective.value(Component::Email).source, BindingSource::Explicit);
+    QCOMPARE(effective.value(Component::Browser).source, BindingSource::Unset);
+    QVERIFY(!effective.value(Component::Browser).application.has_value());
+}
+
+void ResolverTest::effectiveBindingReportsTheBaselineApplication()
+{
+    Profile baseline;
+    baseline.setBinding(Component::Terminal, QStringLiteral("org.kde.konsole.desktop"));
+
+    const auto effective = effectiveBindings(Profile{}, baseline);
+
+    QCOMPARE(effective.value(Component::Terminal).baselineApplication,
+             std::optional<Application>(QStringLiteral("org.kde.konsole.desktop")));
+    QCOMPARE(effective.value(Component::Terminal).source, BindingSource::Fallback);
+}
+
+void ResolverTest::effectiveBindingsIncludesEveryComponent()
+{
+    const auto effective = effectiveBindings(Profile{}, Profile{});
+
+    QCOMPARE(effective.size(), allComponents().size());
+    for (const Component component : allComponents()) {
+        QVERIFY(effective.contains(component));
+    }
+}
+
+void ResolverTest::effectiveBindingNeverCapturesACurrentDefault()
+{
+    // There is deliberately no current-defaults argument: the KCM is
+    // configured-only and must show unset rather than the live system default.
+    const auto effective = effectiveBindings(Profile{}, Profile{});
+
+    QVERIFY(!effective.value(Component::Terminal).application.has_value());
+    QVERIFY(!effective.value(Component::Terminal).baselineApplication.has_value());
+    QCOMPARE(effective.value(Component::Terminal).source, BindingSource::Unset);
 }
 
 QTEST_APPLESS_MAIN(ResolverTest)

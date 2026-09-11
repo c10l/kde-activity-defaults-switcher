@@ -7,6 +7,11 @@ project(activity-defaults-switcher LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+# The KCM plugin is a loadable MODULE. kcoreaddons_add_plugin (used by
+# kcmutils_add_qml_kcm) builds a STATIC plugin unless BUILD_SHARED_LIBS is ON;
+# the project's own libraries are declared STATIC explicitly, so this only
+# affects the plugin.
+set(BUILD_SHARED_LIBS ON)
 # The static libraries are linked into the kded6 shared module, so they must
 # be position-independent.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -34,8 +39,11 @@ find_package(Qt6 REQUIRED COMPONENTS Core Test)
 find_package(KF6Service REQUIRED)
 find_package(KF6Config REQUIRED)
 find_package(KF6CoreAddons REQUIRED)
+find_package(KF6I18n REQUIRED)
 
-add_library(ads-domain STATIC src/domain.cpp)
+# domain.h is listed so AUTOMOC generates the meta-object for its Q_NAMESPACE
+# (the BindingSource enum, exposed to QML by the KCM).
+add_library(ads-domain STATIC src/domain.cpp src/domain.h)
 target_include_directories(ads-domain PUBLIC src)
 target_link_libraries(ads-domain PUBLIC Qt6::Core)
 
@@ -64,6 +72,36 @@ add_library(ads-store STATIC src/store.cpp)
 target_include_directories(ads-store PUBLIC src)
 target_link_libraries(ads-store PUBLIC ads-domain KF6::ConfigCore)
 
+# The shared activity-reader interface. Both the daemon and the KCM program
+# against ActivityBackend, so its QObject anchor lives here; the concrete
+# KActivities-backed reader stays out of this library so the KCM backend and
+# its tests build without the PlasmaActivities/DBus dev packages.
+add_library(ads-activities STATIC src/activity_backend.cpp)
+target_include_directories(ads-activities PUBLIC src)
+target_link_libraries(ads-activities PUBLIC ads-domain Qt6::Core)
+
+# The KCM's testable backend (C++ thinks, QML draws): profile read/write,
+# application enumeration, baseline selection and effective-app computation.
+# Deliberately free of KCMUtils so it and its tests build wherever the core
+# Qt/KF6 packages are; the kcmutils_add_qml_kcm plugin under kcm/ is a thin
+# shell over it. Component display names and picker labels are translated with
+# the KCM's own domain (translation_domain.h), hence KF6::I18n.
+add_library(ads-kcm STATIC
+    src/kcm_backend.cpp
+    src/component_rows_model.cpp
+    src/application_trader_backend.cpp
+)
+target_include_directories(ads-kcm PUBLIC src)
+target_link_libraries(ads-kcm PUBLIC
+    ads-domain
+    ads-store
+    ads-activities
+    ads-writer
+    KF6::I18n
+    KF6::Service
+    Qt6::Core
+)
+
 target_link_libraries(ads-switcher PUBLIC ads-store)
 
 enable_testing()
@@ -84,6 +122,10 @@ add_executable(tst_store tests/tst_store.cpp)
 target_link_libraries(tst_store PRIVATE ads-store Qt6::Test)
 add_test(NAME store COMMAND tst_store)
 
+add_executable(tst_kcm tests/tst_kcm.cpp)
+target_link_libraries(tst_kcm PRIVATE ads-kcm Qt6::Test)
+add_test(NAME kcm COMMAND tst_kcm)
+
 # --- kded6 module (ticket 04) ---
 # The KDEDModule base class and the KActivities consumer come from the
 # KF6DBusAddons and PlasmaActivities dev packages, installed system-wide via
@@ -94,10 +136,11 @@ find_package(PlasmaActivities QUIET)
 if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
     # The module and its JSON are installed side by side into the kded plugin
     # directory; X-KDE-Kded-autoload makes kded6 load it at session start.
-    add_library(activity-defaults-switcher-kded MODULE src/module.cpp src/kactivities_backend.cpp src/activity_backend.cpp src/module.json)
+    add_library(activity-defaults-switcher-kded MODULE src/module.cpp src/kactivities_backend.cpp src/module.json)
     target_include_directories(activity-defaults-switcher-kded PRIVATE src)
     target_link_libraries(activity-defaults-switcher-kded PRIVATE
         ads-switcher
+        ads-activities
         KF6::DBusAddons
         Plasma::Activities
         KF6::CoreAddons
@@ -114,13 +157,13 @@ if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
         tests/tst_module.cpp
         src/module.cpp
         src/kactivities_backend.cpp
-        src/activity_backend.cpp
     )
     target_include_directories(tst_module PRIVATE src)
     target_link_libraries(tst_module PRIVATE
         ads-switcher
         ads-writer
         ads-store
+        ads-activities
         KF6::DBusAddons
         Plasma::Activities
         KF6::CoreAddons
@@ -128,6 +171,21 @@ if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
     )
     add_test(NAME module COMMAND tst_module)
 endif()
+
+# --- KCM (System Settings module, ticket 07) ---
+# A QML KQuickConfigModule (kcm/) over the testable ads-kcm backend. Built only
+# when the KCMUtils dev package and the KActivities-backed reader are present;
+# ads-kcm and tst_kcm build regardless so the backend stays testable anywhere.
+find_package(KF6KCMUtils QUIET)
+find_package(Qt6 COMPONENTS Qml Quick QUIET)
+if(KF6KCMUtils_FOUND AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
+    add_subdirectory(kcm)
+endif()
+
+# Install the KCM's translations: KI18N_INSTALL compiles po/<lang>/<catalog>.po
+# into .mo under share/locale, where KLocalizedString looks them up. No .po
+# files exist yet, so this is a no-op until translations are contributed.
+ki18n_install(po)
 
 # --- uninstall ---
 # CMake has no built-in uninstall. This custom target removes every file

@@ -5,11 +5,17 @@
 
 #include <QList>
 #include <QMap>
+#include <QObject>
 #include <QString>
 
 #include <optional>
 
 namespace ads {
+
+// The meta-object for the namespace itself, so the BindingSource enum can be
+// exposed to QML (qmlRegisterUncreatableMetaObject) for the KCM. It carries no
+// behaviour and leaves the domain logic pure.
+Q_NAMESPACE
 
 // An Application is the chosen program for a binding, identified by its
 // .desktop file (KDE service storageId), e.g. "org.kde.falkon.desktop".
@@ -87,6 +93,32 @@ public:
 private:
     QMap<Component, Application> m_bindings;
 };
+
+// How the KCM's view derived a component's effective Application: set on the
+// activity itself (Explicit), supplied by the baseline activity (Fallback), or
+// absent (Unset). The KCM never captures a current default (ticket 04).
+enum class BindingSource {
+    Explicit,
+    Fallback,
+    Unset,
+};
+Q_ENUM_NS(BindingSource)
+
+// The KCM's per-component view of a selected Profile against a baseline
+// Profile. `application` is nullopt when Unset; `baselineApplication` is
+// nullopt when the baseline has no binding for the component.
+struct EffectiveBinding {
+    std::optional<Application> application;
+    BindingSource source = BindingSource::Unset;
+    std::optional<Application> baselineApplication;
+};
+
+// Pure: every component's effective binding for `selectedProfile`, using
+// `baselineProfile`'s binding as a fallback and Unset when neither has one.
+// Unlike Resolver::resolve it never captures a current default and reports the
+// source of each result. Every component is present in the result.
+QMap<Component, EffectiveBinding> effectiveBindings(const Profile &selectedProfile,
+                                                    const Profile &baselineProfile);
 
 // The Resolver turns the current and baseline activity profiles plus the
 // current system defaults into the set of decisions (component -> application)

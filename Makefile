@@ -20,7 +20,7 @@ PODMAN       ?= podman
 CMAKE_FLAGS  ?= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # All C++ sources, used by the format/lint targets.
-SOURCES := $(shell find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -print)
+SOURCES := $(shell find src tests kcm -type f \( -name '*.cpp' -o -name '*.h' \) -print)
 
 .DEFAULT_GOAL := help
 

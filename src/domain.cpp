@@ -154,4 +154,29 @@ Resolver::resolve(const Activity &currentActivity, const std::optional<Activity>
     return decisions;
 }
 
+QMap<Component, EffectiveBinding> effectiveBindings(const Profile &selectedProfile,
+                                                    const Profile &baselineProfile)
+{
+    QMap<Component, EffectiveBinding> result;
+    for (const Component component : allComponents()) {
+        EffectiveBinding effective;
+        effective.baselineApplication = baselineProfile.bindingFor(component);
+
+        if (const auto explicitBinding = selectedProfile.bindingFor(component)) {
+            effective.application = explicitBinding;
+            effective.source = BindingSource::Explicit;
+        } else if (effective.baselineApplication.has_value()) {
+            // A fallback binding: the baseline activity supplies the application
+            // for a component the selected activity leaves unset.
+            effective.application = effective.baselineApplication;
+            effective.source = BindingSource::Fallback;
+        } else {
+            effective.application = std::nullopt;
+            effective.source = BindingSource::Unset;
+        }
+        result.insert(component, effective);
+    }
+    return result;
+}
+
 } // namespace ads
