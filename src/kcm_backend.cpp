@@ -67,11 +67,40 @@ void KcmBackend::load()
     if (selectionChanged) {
         Q_EMIT selectedActivityIdChanged();
     }
+    // A load (open, or the shell's reset) drops any buffered edits.
+    if (m_hasPendingChanges) {
+        m_hasPendingChanges = false;
+        Q_EMIT hasPendingChangesChanged();
+    }
 }
 
 QString KcmBackend::selectedActivityId() const
 {
     return m_selectedActivityId;
+}
+
+bool KcmBackend::hasPendingChanges() const
+{
+    return m_hasPendingChanges;
+}
+
+void KcmBackend::save()
+{
+    if (!m_hasPendingChanges) {
+        return;
+    }
+    m_store->save(m_profiles);
+    m_hasPendingChanges = false;
+    Q_EMIT hasPendingChangesChanged();
+}
+
+void KcmBackend::markPending()
+{
+    if (m_hasPendingChanges) {
+        return;
+    }
+    m_hasPendingChanges = true;
+    Q_EMIT hasPendingChangesChanged();
 }
 
 void KcmBackend::setSelectedActivityId(const QString &id)
@@ -183,7 +212,7 @@ void KcmBackend::setBinding(int component, const QString &application)
     }
 
     m_profiles[m_selectedActivityId].setBinding(selected, application);
-    m_store->save(m_profiles);
+    markPending();
     refreshRow(selected);
 }
 
@@ -198,7 +227,7 @@ void KcmBackend::clearBinding(int component)
     }
 
     m_profiles[m_selectedActivityId].removeBinding(selected);
-    m_store->save(m_profiles);
+    markPending();
     refreshRow(selected);
 }
 
@@ -212,7 +241,7 @@ void KcmBackend::resetActivity()
     for (const Component component : allComponents()) {
         profile.removeBinding(component);
     }
-    m_store->save(m_profiles);
+    markPending();
     refreshRows();
 }
 

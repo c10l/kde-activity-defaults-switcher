@@ -18,10 +18,11 @@ import org.kde.kirigami as Kirigami
 KCMUtils.SimpleKCM {
     id: root
 
-    // Instant apply: every edit is persisted by the backend as it happens, so
-    // the shell offers no Apply/OK. The built-in Default button is module-wide
-    // and not used; Reset is per-activity and lives below (ticket 06).
-    KCMUtils.ConfigModule.buttons: KCMUtils.ConfigModule.NoAdditionalButton
+    // Apply-button semantics: edits are buffered in the backend and written on
+    // Apply (the module pins supportsInstantApply false). Offer the Apply and
+    // Close buttons. The built-in Default button is module-wide and not used;
+    // Reset is per-activity and lives below (ticket 06).
+    KCMUtils.ConfigModule.buttons: KCMUtils.ConfigModule.Apply | KCMUtils.ConfigModule.Help
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing

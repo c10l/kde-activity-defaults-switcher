@@ -1,23 +1,51 @@
-# 23: KCM — set `supportsInstantApply` explicitly
+# 23: KCM — switch to Apply-button semantics
 
-**What to build:** `ActivityDefaultsSwitcherKcm` (`kcm/kcm.cpp`) never sets `supportsInstantApply`; it relies on `KAbstractConfigModule`'s default (`true`), which is the instant-apply behaviour ticket 07 wants and which the design for the save/apply path (`.scratch/kcm-component/issues/06-save-apply-defaults-reset.md`, decision 1) asked to be set "explicitly for clarity". Ticket 07's review note recorded that this clarity item was not done, but that the behaviour is correct because the base default is `true`. This is a robustness/clarity item, not a bug: an upstream default change or a later edit could silently flip the KCM to Apply-button semantics.
+**Supersedes** the original scope of this ticket ("set `supportsInstantApply` explicitly for clarity"). Verification of that narrower note is recorded below; the user then decided the KCM should behave like the rest of System Settings — **the user clicks Apply to save** — which reverses the instant-apply decision in `.scratch/kcm-component/issues/06-save-apply-defaults-reset.md` decision 1.
 
-**Verification first (grill the user):** Before writing code, verify the note against the current tree — confirm `supportsInstantApply` is unset in `kcm/kcm.cpp` and what `KQuickConfigModule`'s default is — then interview the user on whether to pin it explicitly (and whether the neighbouring lifecycle knobs — `needsSave`, `save()`, `buttons` — should be pinned at the same time, and how it should be tested). Implement only after that.
+## What to build
 
-**Blocked by:** 07 (KCM component).
+The KCM currently applies instantly: every edit in `KcmBackend` mutates the in-memory profile map and calls `ProfileStore::save()` immediately, and `ActivityDefaultsSwitcherKcm` relies on `KAbstractConfigModule`'s default `supportsInstantApply == true` with no Apply button.
+
+Change it to Apply-button semantics:
+
+- Edits (set binding, Inherit clear, per-activity Reset) mutate the in-memory `Profile` maps only. No `ProfileStore::save()` on edit.
+- The module tracks pending changes: call `setNeedsSave(true)` on the first unsaved edit (base `needsSave()` is already `false`), and expose the built-in Apply button (`buttons` includes `Apply`).
+- `save()` is overridden to persist the pending profiles once (`ProfileStore::save()`) and clear `needsSave` (`setNeedsSave(false)`).
+- `supportsInstantApply` is set explicitly to `false` in `ActivityDefaultsSwitcherKcm`, with a comment stating the Apply-button contract (this is the originally requested explicit pin, now with the opposite value).
+- `load()` discards any pending edits and re-reads the store (the shell calls `load()` on Reset/undo).
+
+The daemon is unchanged. It still watches the store file and flips live on change ([ADR 0002](../../../docs/adr/0002-kcm-writes-profile-store-daemon-watches.md)); the change is only *when* the KCM writes the file — on Apply rather than on every edit. ADR-0002 still holds.
+
+## Verification of the original note (AC 1, done)
+
+- `supportsInstantApply` is **not set** in `kcm/kcm.cpp`.
+- `KQuickConfigModule`'s effective default is **`true`** — confirmed against the installed `libKF6KCMUtilsCore.so.6.28.0`: the `KAbstractConfigModule` constructor sets the byte at private offset `0x3c` to `1`, and `supportsInstantApply()` reads that byte.
+- `buttons` is already pinned, in the view: `kcm/ui/main.qml:24` sets `KCMUtils.ConfigModule.buttons: KCMUtils.ConfigModule.NoAdditionalButton`.
+- No test instantiates `ActivityDefaultsSwitcherKcm`; the `tests/tst_kcm.cpp` seam is `KcmBackend`.
+
+## Decision record
+
+The user directed: *"Write down explicitly that we want to behave the same way as the rest of the system settings pages - user clicks apply to save."* This is a deliberate reversal of `.scratch/kcm-component/issues/06-save-apply-defaults-reset.md` decision 1 (instant apply), which the user stated they had not consciously chosen. The status of that design ticket's decision 1 is now **superseded by this ticket**.
+
+## Blocked by
+
+07 (KCM component) — done.
 
 **Status:** ready-for-agent
 
-- [ ] The note is verified against `kcm/kcm.cpp` and `KQuickConfigModule` (unset here; its effective value; whether explicit setting is desirable), with the findings reported.
-- [ ] The user is grilled on whether and how to act, before any code changes.
-- [ ] If acted on: `supportsInstantApply` is set explicitly in `ActivityDefaultsSwitcherKcm` with a comment stating the instant-apply contract, and any agreed neighbouring knobs are pinned the same way; the choice is covered by a test if a seam exists, otherwise the rationale is recorded in this ticket.
-- [ ] If declined: the decision and its rationale are recorded in this ticket.
+- [ ] Editing a binding no longer writes the store; the store changes only on `save()`.
+- [ ] The shell shows an Apply button and it is enabled after an edit (`setNeedsSave(true)` on first unsaved edit).
+- [ ] Clicking Apply persists the pending profiles and clears `needsSave`.
+- [ ] `supportsInstantApply` is set explicitly to `false` in `ActivityDefaultsSwitcherKcm`, with a comment stating the Apply-button contract.
+- [ ] `load()` discards pending edits and re-reads the store.
+- [ ] Covered by tests at the `KcmBackend` seam (pending-vs-persisted store writes, needsSave transitions); if any part has no seam, the rationale is recorded here.
+- [ ] The `buttons` value in `kcm/ui/main.qml` is reconciled with the Apply decision (explicit Apply; no Default button).
 
-**Suggested skills:** `work-ticket` (implementer — verify the note and grill the user); `review-ticket` (reviewer).
+**Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
 **References:**
-- `kcm/kcm.cpp` — the module constructor and `load()`.
-- `.scratch/kcm-component/issues/06-save-apply-defaults-reset.md` — decision 1 (instant apply; "set it explicitly for clarity").
-- `.scratch/activity-defaults-switcher/issues/07-kcm-component.md` — "Note from review of 07".
-- `.scratch/kcm-component/issues/01-kcm-build-wiring-and-kquickconfigmodule-lifecycle.md` — the lifecycle virtuals and the `supportsInstantApply` default.
-- `kcm/ui/main.qml` — the view that assumes instant apply.
+- `kcm/kcm.cpp` — the module constructor and `load()`; add `save()` and the explicit flag.
+- `src/kcm_backend.cpp` / `kcm_backend.h` — the edit path that must stop saving eagerly.
+- `.scratch/kcm-component/issues/06-save-apply-defaults-reset.md` — decision 1, now superseded.
+- `.scratch/kcm-component/issues/01-kcm-build-wiring-and-kquickconfigmodule-lifecycle.md` — the lifecycle virtuals.
+- `kcm/ui/main.qml` — the view's `buttons` line.

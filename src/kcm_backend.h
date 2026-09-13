@@ -22,10 +22,11 @@ class ComponentRowsModel;
 // The KCM's testable C++ backend: all of the module's non-visual logic. It
 // reads the activities and the profile store once (the KCM is a snapshot editor,
 // no live refresh), derives the selected activity's effective bindings against
-// the baseline activity, and persists edits straight through ProfileStore - the
-// same file the daemon watches (ADR 0002), so a current-activity edit is applied
-// live by the daemon and a non-current one applies when that activity becomes
-// current. QML only renders this.
+// the baseline activity, and buffers edits until the user applies them. Applied
+// edits are written through ProfileStore - the same file the daemon watches
+// (ADR 0002), so a current-activity edit is applied live by the daemon and a
+// non-current one applies when that activity becomes current. QML only renders
+// this.
 class KcmBackend : public QObject
 {
     Q_OBJECT
@@ -35,6 +36,7 @@ class KcmBackend : public QObject
     Q_PROPERTY(QString currentActivityId READ currentActivityId NOTIFY activitiesChanged)
     Q_PROPERTY(QVariantList activities READ activities NOTIFY activitiesChanged)
     Q_PROPERTY(bool hasActivities READ hasActivities NOTIFY activitiesChanged)
+    Q_PROPERTY(bool hasPendingChanges READ hasPendingChanges NOTIFY hasPendingChangesChanged)
     Q_PROPERTY(QAbstractItemModel *componentRows READ componentRows CONSTANT)
 
 public:
@@ -53,6 +55,12 @@ public:
     QString currentActivityId() const;
     QVariantList activities() const;
     bool hasActivities() const;
+    // Whether an edit has been buffered and not yet written to the store. The
+    // shell uses this to enable the Apply button (setNeedsSave).
+    bool hasPendingChanges() const;
+    // Writes the buffered profiles to the store and clears the pending flag.
+    // Called by the module's save() when the user clicks Apply.
+    void save();
     QAbstractItemModel *componentRows() const;
 
     // The picker's candidates for a component: the Inherit entry first (labelled
@@ -60,20 +68,23 @@ public:
     // otherwise), then the enumerated applications. Each entry is a map with
     // storageId, displayName and isInheritEntry.
     Q_INVOKABLE QVariantList pickerEntries(int component) const;
-    // Sets an explicit binding for the selected activity and persists it.
+    // Sets an explicit binding for the selected activity. Buffered, not saved.
     Q_INVOKABLE void setBinding(int component, const QString &application);
     // Removes the explicit binding, so the component falls back to the baseline.
+    // Buffered, not saved.
     Q_INVOKABLE void clearBinding(int component);
-    // Clears every explicit binding of the selected activity.
+    // Clears every explicit binding of the selected activity. Buffered, not saved.
     Q_INVOKABLE void resetActivity();
 
 Q_SIGNALS:
     void selectedActivityIdChanged();
     void activitiesChanged();
+    void hasPendingChangesChanged();
 
 private:
     Profile selectedProfile() const;
     Profile baselineProfile() const;
+    void markPending();
     void refreshRows();
     void refreshRow(Component component);
 
@@ -86,6 +97,7 @@ private:
     QString m_selectedActivityId;
     QString m_baselineActivityId;
     QString m_currentActivityId;
+    bool m_hasPendingChanges = false;
 };
 
 } // namespace ads

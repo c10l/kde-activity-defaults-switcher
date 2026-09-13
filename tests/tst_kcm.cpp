@@ -115,14 +115,17 @@ private slots:
     void rowSourceIsUnsetWhenNeitherBinds();
     void rowCarriesBaselineApplication();
 
-    void settingBindingPersistsThroughStore();
     void settingBindingUpdatesRowToExplicit();
     void settingBindingForNonCurrentActivityPersists();
-    void settingBindingPersistsToRealStoreFile();
     void clearingBindingFallsBackToBaseline();
     void clearingWhenNoBaselineLeavesUnset();
     void resetClearsEveryExplicitBinding();
     void switchingSelectedActivityChangesRows();
+
+    void editingDoesNotWriteTheStore();
+    void editingMarksPendingChanges();
+    void saveWritesPendingProfilesAndClearsPending();
+    void loadDiscardsPendingEdits();
 
     void pickerStartsWithInheritThenApplications();
     void inheritEntryNamesTheBaselineApplication();
@@ -391,26 +394,6 @@ void KcmTest::rowCarriesBaselineApplication()
              QStringLiteral("org.kde.konsole.desktop"));
 }
 
-void KcmTest::settingBindingPersistsThroughStore()
-{
-    auto store = std::make_unique<FakeStore>();
-    auto *storePtr = store.get();
-
-    auto activity = std::make_unique<FakeActivityBackend>();
-    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
-    activity->currentId = QStringLiteral("work-id");
-
-    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
-                       std::move(store));
-    backend.load();
-
-    backend.setBinding(static_cast<int>(Component::Browser), QStringLiteral("firefox.desktop"));
-
-    QCOMPARE(storePtr->saves, 1);
-    QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
-             std::optional<Application>(QStringLiteral("firefox.desktop")));
-}
-
 void KcmTest::settingBindingUpdatesRowToExplicit()
 {
     auto activity = std::make_unique<FakeActivityBackend>();
@@ -449,29 +432,11 @@ void KcmTest::settingBindingForNonCurrentActivityPersists()
     // Select and edit the non-current activity: the binding persists for it.
     backend.setSelectedActivityId(QStringLiteral("home-id"));
     backend.setBinding(static_cast<int>(Component::Browser), QStringLiteral("chromium.desktop"));
+    backend.save();
 
     QCOMPARE(storePtr->saved.value(QStringLiteral("home-id")).bindingFor(Component::Browser),
              std::optional<Application>(QStringLiteral("chromium.desktop")));
     QVERIFY(!storePtr->saved.value(QStringLiteral("work-id")).hasBinding(Component::Browser));
-}
-
-void KcmTest::settingBindingPersistsToRealStoreFile()
-{
-    auto activity = std::make_unique<FakeActivityBackend>();
-    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
-    activity->currentId = QStringLiteral("work-id");
-
-    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
-                       std::make_unique<ProfileStore>());
-    backend.load();
-
-    backend.setBinding(static_cast<int>(Component::Browser), QStringLiteral("firefox.desktop"));
-
-    // The exact structure the daemon reads: one group per component, activity
-    // id as key, storageId as value.
-    const QByteArray content = storeFileContent();
-    QVERIFY(content.contains("[Browser]"));
-    QVERIFY(content.contains("work-id=firefox.desktop"));
 }
 
 void KcmTest::clearingBindingFallsBackToBaseline()
@@ -500,6 +465,7 @@ void KcmTest::clearingBindingFallsBackToBaseline()
     backend.load();
 
     backend.clearBinding(static_cast<int>(Component::Browser));
+    backend.save();
 
     QVERIFY(!storePtr->saved.value(QStringLiteral("work-id")).hasBinding(Component::Browser));
     QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::EffectiveApplicationRole)
@@ -561,6 +527,7 @@ void KcmTest::resetClearsEveryExplicitBinding()
     backend.load();
 
     backend.resetActivity();
+    backend.save();
 
     // The whole selected activity's explicit bindings are gone; the browser
     // falls back to the baseline, email is unset.
@@ -606,6 +573,92 @@ void KcmTest::switchingSelectedActivityChangesRows()
     QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::EffectiveApplicationRole)
                  .toString(),
              QStringLiteral("chromium.desktop"));
+}
+
+void KcmTest::editingDoesNotWriteTheStore()
+{
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::move(store));
+    backend.load();
+
+    backend.setBinding(static_cast<int>(Component::Browser), QStringLiteral("firefox.desktop"));
+
+    // Editing buffers; nothing reaches the store until apply.
+    QCOMPARE(storePtr->saves, 0);
+}
+
+void KcmTest::editingMarksPendingChanges()
+{
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::make_unique<FakeStore>());
+    backend.load();
+
+    QVERIFY(!backend.hasPendingChanges());
+    backend.setBinding(static_cast<int>(Component::Browser), QStringLiteral("firefox.desktop"));
+    QVERIFY(backend.hasPendingChanges());
+}
+
+void KcmTest::saveWritesPendingProfilesAndClearsPending()
+{
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::move(store));
+    backend.load();
+
+    backend.setBinding(static_cast<int>(Component::Browser), QStringLiteral("firefox.desktop"));
+    backend.save();
+
+    QCOMPARE(storePtr->saves, 1);
+    QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+             std::optional<Application>(QStringLiteral("firefox.desktop")));
+    QVERIFY(!backend.hasPendingChanges());
+}
+
+void KcmTest::loadDiscardsPendingEdits()
+{
+    Profile work;
+    work.setBinding(Component::Browser, QStringLiteral("org.kde.falkon.desktop"));
+
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+    store->loaded = {{QStringLiteral("work-id"), work}};
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::move(store));
+    backend.load();
+
+    backend.setBinding(static_cast<int>(Component::Browser), QStringLiteral("firefox.desktop"));
+    QVERIFY(backend.hasPendingChanges());
+
+    backend.load();
+
+    // The buffer is dropped and the store is re-read: the persisted binding wins.
+    QCOMPARE(storePtr->saves, 0);
+    QVERIFY(!backend.hasPendingChanges());
+    QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::EffectiveApplicationRole)
+                 .toString(),
+             QStringLiteral("org.kde.falkon.desktop"));
 }
 
 void KcmTest::pickerStartsWithInheritThenApplications()
