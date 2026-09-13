@@ -13,6 +13,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 kcmutils_add_qml_kcm(activity-defaults-switcher-kcm
     SOURCES
         kcm.cpp
+        kcm_shell.cpp
         ${CMAKE_SOURCE_DIR}/src/kactivities_backend.cpp
 )
 target_include_directories(activity-defaults-switcher-kcm PRIVATE ${CMAKE_SOURCE_DIR}/src)

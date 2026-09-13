@@ -201,10 +201,11 @@ if(KF6KCMUtils_FOUND AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND KF6DBusAddons_FOUND
     # main.qml where the real plugin would have it.
     add_library(ads-kcm-smoke MODULE
         tests/kcm_qml/kcm_smoke_module.cpp
+        kcm/kcm_shell.cpp
         tests/kcm_qml/kcm_smoke.qrc
     )
     set_target_properties(ads-kcm-smoke PROPERTIES AUTORCC ON)
-    target_include_directories(ads-kcm-smoke PRIVATE tests/kcm_qml src)
+    target_include_directories(ads-kcm-smoke PRIVATE tests/kcm_qml src kcm)
     target_link_libraries(ads-kcm-smoke PRIVATE
         ads-kcm-smoke-support
         ads-kcm

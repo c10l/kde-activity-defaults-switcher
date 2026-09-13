@@ -1,51 +1,33 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // Copyright (C) 2026 c10l
 
-// The KQuickConfigModule shell the offscreen QML smoke test (ticket 22) loads:
-// it is kcm/kcm.cpp's module with the production KActivities/KApplicationTrader
+// The offscreen QML smoke test's plugin (ticket 22): the *shared* production
+// shell (kcm/kcm_shell.cpp) with the production KActivities/KApplicationTrader
 // backend swapped for the test-injected one (kcm_smoke_support.h), so the view
-// renders deterministic row states. Everything else - the QML resource, the
-// KCMUtils shell, the domain enum registration - is the production machinery,
-// so a QML regression (broken id, wrong role, unresolved enum, delegate error,
-// mis-selected combo) fails the test the way it would fail System Settings.
+// renders deterministic row states. Because the shell is shared rather than
+// copied, a change to the shell's wiring - the backend property, the org.kde.ads
+// enum registration, the Apply semantics and the pending-changes connection,
+// load()/save() - fails the smoke test the way it would fail System Settings;
+// only createBackend() differs here.
 
 #include "kcm_smoke_support.h"
 
-#include "domain.h"
 #include "kcm_backend.h"
+#include "kcm_shell.h"
 
 #include <KPluginFactory>
-#include <KQuickConfigModule>
-#include <QQmlEngine>
 
 using namespace ads;
 
-class KcmSmokeModule : public KQuickConfigModule
+class KcmSmokeModule : public KcmShell
 {
     Q_OBJECT
-    Q_PROPERTY(ads::KcmBackend *backend READ backend CONSTANT)
 
 public:
-    KcmSmokeModule(QObject *parent, const KPluginMetaData &metaData)
-        : KQuickConfigModule(parent, metaData)
-    {
-        // The production module registers this in kcm/kcm.cpp; the view needs
-        // the BindingSource enum (Ads.BindingSource.Fallback) resolved. Once
-        // per process.
-        static const int registered = qmlRegisterUncreatableMetaObject(
-            ads::staticMetaObject, "org.kde.ads", 1, 0, "Ads",
-            QStringLiteral("Ads is an enum namespace and cannot be created"));
-        Q_UNUSED(registered);
-    }
+    KcmSmokeModule(QObject *parent, const KPluginMetaData &metaData) : KcmShell(parent, metaData) {}
 
-    ads::KcmBackend *backend() const { return kcm_smoke::backend(); }
-
-    void load() override
-    {
-        if (auto *b = kcm_smoke::backend()) {
-            b->load();
-        }
-    }
+protected:
+    ads::KcmBackend *createBackend() override { return kcm_smoke::backend(); }
 };
 
 K_PLUGIN_CLASS_WITH_JSON(KcmSmokeModule, "kcm_smoke_module.json")

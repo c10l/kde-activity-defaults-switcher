@@ -50,6 +50,7 @@ KCMUtils.SimpleKCM {
                 model: kcm.backend.activities
                 textRole: "name"
                 valueRole: "id"
+                enabled: kcm.backend.hasActivities
                 onActivated: kcm.backend.selectedActivityId = currentValue
 
                 // Mark the baseline activity in the closed field and the list.
@@ -96,6 +97,7 @@ KCMUtils.SimpleKCM {
             QQC2.Button {
                 text: i18n("Reset")
                 icon.name: "edit-undo"
+                enabled: kcm.backend.hasActivities
                 onClicked: kcm.backend.resetActivity()
             }
         }
@@ -112,6 +114,7 @@ KCMUtils.SimpleKCM {
 
                 Layout.fillWidth: true
                 visible: kcm.backend.hasActivities
+                enabled: kcm.backend.hasActivities
                 spacing: Kirigami.Units.largeSpacing
 
                 onEffectiveApplicationChanged: componentPicker.syncSelection()
@@ -124,6 +127,7 @@ KCMUtils.SimpleKCM {
                 QQC2.ComboBox {
                     id: componentPicker
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                    enabled: kcm.backend.hasActivities
                     // The Inherit entry's label depends on the baseline, so
                     // refresh the list after an edit (the extra reads are the
                     // dependencies that make the binding re-evaluate).

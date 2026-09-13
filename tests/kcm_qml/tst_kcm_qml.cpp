@@ -45,15 +45,17 @@ class FakeActivityBackend : public ActivityBackend
 {
 public:
     bool isRunning() const override { return true; }
-    QString currentActivityId() const override { return QStringLiteral("work-id"); }
-    QList<Activity> allActivities() const override
-    {
-        return {
-            Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
-            Activity{QStringLiteral("default-id"), QStringLiteral("Default")},
-        };
-    }
+    QString currentActivityId() const override { return currentId; }
+    QList<Activity> allActivities() const override { return activities; }
     QString activityName(const QString &id) const override { return id; }
+
+    // Scriptable, so a test can drive the view to the empty state (zero
+    // activities) and back.
+    QString currentId = QStringLiteral("work-id");
+    QList<Activity> activities{
+        Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-id"), QStringLiteral("Default")},
+    };
 };
 
 // A fake ApplicationBackend with a fixed candidate list per component and
@@ -80,9 +82,15 @@ class FakeStore : public ProfileStore
 {
 public:
     QMap<ActivityId, Profile> load() const override { return loaded; }
-    void save(const QMap<ActivityId, Profile> &) const override {}
+    void save(const QMap<ActivityId, Profile> &profiles) const override
+    {
+        ++saves;
+        saved = profiles;
+    }
 
     QMap<ActivityId, Profile> loaded;
+    mutable int saves = 0;
+    mutable QMap<ActivityId, Profile> saved;
 };
 
 // The ComboBox of a component row, found among the RowLayout delegate's
@@ -147,6 +155,43 @@ QObject *activitySelector(QQuickItem *root)
     return nullptr;
 }
 
+// The "No activities to configure" placeholder (ticket 07 AC 9): a
+// Kirigami.PlaceholderMessage whose text the empty state sets.
+QObject *emptyStatePlaceholder(QQuickItem *root)
+{
+    for (QObject *object : root->findChildren<QObject *>()) {
+        if (!QString(object->metaObject()->className())
+                 .contains(QStringLiteral("PlaceholderMessage"))) {
+            continue;
+        }
+        if (object->property("text").toString() == QStringLiteral("No activities to configure")) {
+            return object;
+        }
+    }
+    return nullptr;
+}
+
+// Every Repeater delegate row currently instantiated, with its component. Used
+// to check the empty state hides (and disables) every row.
+QList<QQuickItem *> componentRows(QQuickItem *root)
+{
+    QList<QQuickItem *> rows;
+    for (QObject *object : root->findChildren<QObject *>()) {
+        if (!QString(object->metaObject()->className()).contains(QStringLiteral("Repeater"))) {
+            continue;
+        }
+        for (int i = 0; i < object->property("count").toInt(); ++i) {
+            QQuickItem *row = nullptr;
+            if (QMetaObject::invokeMethod(object, "itemAt", Qt::DirectConnection,
+                                          Q_RETURN_ARG(QQuickItem *, row), Q_ARG(int, i)) &&
+                row) {
+                rows << row;
+            }
+        }
+    }
+    return rows;
+}
+
 // Collects Qt's warning/critical messages while the view loads, writing them
 // straight to stderr (never re-entering the handler, which would recurse).
 QStringList *s_loggedWarnings = nullptr;
@@ -176,6 +221,8 @@ private slots:
     void fallbackBindingRowShowsTheBaselineApplication();
     void unsetComponentRowShowsTheInheritEntry();
     void activitySelectorMarksTheBaselineActivity();
+    void shellWiringAppliesOnApplyNotInstantly();
+    void emptyStateHidesPickersAndDisablesEditing();
     void cleanupTestCase();
 
 private:
@@ -184,6 +231,10 @@ private:
     // are process-wide.
     std::unique_ptr<KcmBackend> m_backend;
     std::unique_ptr<KQuickConfigModule> m_module;
+    // Non-owning handles to the fakes owned by m_backend, for the tests that
+    // drive the view (the empty state) or observe the apply path (save()).
+    FakeStore *m_store = nullptr;
+    FakeActivityBackend *m_activityBackend = nullptr;
     // The engine handed to the module loader, so the test can observe its
     // warnings from the moment mainUi() loads the view (module.engine() is only
     // meaningful after that).
@@ -213,10 +264,14 @@ void KcmQmlSmokeTest::initTestCase()
     baseline.setBinding(Component::Email, QStringLiteral("kmail.desktop"));
 
     auto store = std::make_unique<FakeStore>();
+    m_store = store.get();
     store->loaded = {
         {QStringLiteral("work-id"), work},
         {QStringLiteral("default-id"), baseline},
     };
+
+    auto activityBackend = std::make_unique<FakeActivityBackend>();
+    m_activityBackend = activityBackend.get();
 
     auto applications = std::make_unique<FakeApplicationBackend>();
     applications->candidates.insert(
@@ -231,8 +286,8 @@ void KcmQmlSmokeTest::initTestCase()
     applications->names.insert(QStringLiteral("firefox.desktop"), QStringLiteral("Firefox"));
     applications->names.insert(QStringLiteral("kmail.desktop"), QStringLiteral("KMail"));
 
-    m_backend = std::make_unique<KcmBackend>(std::make_unique<FakeActivityBackend>(),
-                                             std::move(applications), std::move(store));
+    m_backend = std::make_unique<KcmBackend>(std::move(activityBackend), std::move(applications),
+                                             std::move(store));
     m_backend->load();
     kcm_smoke::setBackend(m_backend.get());
 
@@ -355,6 +410,96 @@ void KcmQmlSmokeTest::activitySelectorMarksTheBaselineActivity()
     }
     QVERIFY2(markedBaseline, "the baseline activity was not marked in the selector");
     QVERIFY2(unmarkedWork, "a non-baseline activity was marked as baseline");
+}
+
+// The shell wiring the smoke plugin shares with production (ticket 24,
+// boundary 1): the module must apply on Apply, not instantly - the ticket 23
+// contract - and an edit must drive needsSave through the backend's
+// pending-changes signal, and save() must reach the store. Breaking any of
+// these in kcm/kcm_shell.cpp fails this test, where before it left the smoke
+// suite green because the shell was a test-only copy.
+void KcmQmlSmokeTest::shellWiringAppliesOnApplyNotInstantly()
+{
+    QQuickItem *root = m_module->mainUi();
+    QVERIFY(root);
+
+    QCOMPARE(m_module->supportsInstantApply(), false);
+    QCOMPARE(m_module->needsSave(), false);
+    const int savesBefore = m_store->saves;
+
+    // Edit through the backend's public API (the view's gesture path).
+    m_backend->setSelectedActivityId(QStringLiteral("work-id"));
+    m_backend->setBinding(static_cast<int>(Component::Terminal), QStringLiteral("konsole.desktop"));
+
+    // The pending-changes connection must have enabled Apply; nothing written
+    // yet (no instant apply).
+    QCOMPARE(m_backend->hasPendingChanges(), true);
+    QCOMPARE(m_module->needsSave(), true);
+    QCOMPARE(m_store->saves, savesBefore);
+
+    // Apply persists through the store, the daemon's watch file.
+    m_module->save();
+    QCOMPARE(m_store->saves, savesBefore + 1);
+    QCOMPARE(m_backend->hasPendingChanges(), false);
+    QCOMPARE(m_module->needsSave(), false);
+    QCOMPARE(m_store->saved.value(QStringLiteral("work-id"))
+                 .bindingFor(Component::Terminal)
+                 .value_or(QString()),
+             QStringLiteral("konsole.desktop"));
+}
+
+// The empty state (ticket 07 AC 9, ticket 24 boundary 2): with no activities
+// the placeholder is shown and editing is disabled - the selector and every
+// component row are hidden and not enabled. The suite's backend is driven to
+// zero activities and back, so the test is repeatable.
+void KcmQmlSmokeTest::emptyStateHidesPickersAndDisablesEditing()
+{
+    QQuickItem *root = m_module->mainUi();
+    QVERIFY(root);
+
+    QVERIFY2(emptyStatePlaceholder(root) == nullptr ||
+                 !emptyStatePlaceholder(root)->property("visible").toBool(),
+             "the empty-state placeholder was visible with activities present");
+
+    // Drive the view to the empty state through the backend's public API.
+    m_activityBackend->activities.clear();
+    m_backend->load();
+
+    QObject *placeholder = emptyStatePlaceholder(root);
+    QVERIFY2(placeholder, "no empty-state placeholder was rendered");
+    if (!placeholder) {
+        return;
+    }
+    QVERIFY2(placeholder->property("visible").toBool(),
+             "the empty-state placeholder was not visible with zero activities");
+
+    QObject *selector = activitySelector(root);
+    QVERIFY2(selector, "no activity selector rendered");
+    if (!selector) {
+        return;
+    }
+    QVERIFY2(!selector->property("visible").toBool(),
+             "the activity selector was visible with zero activities");
+    QVERIFY2(!selector->property("enabled").toBool(),
+             "the activity selector was enabled with zero activities");
+
+    const QList<QQuickItem *> rows = componentRows(root);
+    QVERIFY2(!rows.isEmpty(), "no component rows were instantiated at all");
+    for (QQuickItem *row : rows) {
+        QVERIFY2(!row->property("visible").toBool(),
+                 "a component row was visible with zero activities");
+        QVERIFY2(!row->property("enabled").toBool(),
+                 "a component row was enabled with zero activities");
+    }
+
+    // Restore, so a later test (or a rerun) sees the populated view.
+    m_activityBackend->activities = {
+        Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
+        Activity{QStringLiteral("default-id"), QStringLiteral("Default")},
+    };
+    m_backend->load();
+    QVERIFY(!emptyStatePlaceholder(root) ||
+            !emptyStatePlaceholder(root)->property("visible").toBool());
 }
 
 void KcmQmlSmokeTest::cleanupTestCase()
