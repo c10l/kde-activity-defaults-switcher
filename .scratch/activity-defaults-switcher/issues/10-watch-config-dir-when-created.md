@@ -13,6 +13,7 @@
 ### Notes from review of 10
 
 - The commit message's "self-heals across directory deletions/recreations" reads broader than the code guarantees: once the watch is upgraded onto the config directory itself, deleting that directory while the module runs makes `QFileSystemWatcher` silently drop the inotify watch, and no directory event fires on recreation because the nearest ancestor is no longer watched — so the watch is only re-established at the next daemon start. This is out of ticket 10's scope (the ticket is about a config dir absent at *construction*) and practically nil in impact (deleting `~/.config` under a live session breaks the session anyway, and login re-watches). Accepted as deferred; no follow-up ticket.
+- **Correction from review of 25 (`9fcceaa`):** the note above is wrong for the current code. `ensureConfigDirectoryWatched()` is re-entered from the `directoryChanged` handler and, when the config directory vanishes, re-arms the watch onto the nearest existing ancestor — so recreating the directory fires an ancestor event, the watch is upgraded back onto the config dir, and later `mimeapps.list` edits are still captured. Pinned by `configDirDeletedAndRecreatedIsRewatchedAndCaptureRuns` in `tests/tst_module.cpp`.
 
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
