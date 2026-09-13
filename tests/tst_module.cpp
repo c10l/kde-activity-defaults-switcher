@@ -198,6 +198,10 @@ private slots:
     void recreatedFileIsReWatchedAndCaptureRuns();
     void rapidChangesCoalesceIntoSingleCapture();
     void configDirCreatedAfterStartupIsWatchedAndCaptureRuns();
+    // Ticket 25: the config-dir watch survives the directory being deleted and
+    // recreated while the module runs (the ticket-10 review note claimed it did
+    // not; this pins the behaviour that actually holds).
+    void configDirDeletedAndRecreatedIsRewatchedAndCaptureRuns();
     // Ticket 16: the daemon watches the profile store so a KCM edit applies live.
     void newlyCreatedStoreIsWatchedAndReapplies();
     void recreatedStoreIsRewatchedAndReapplies();
@@ -707,6 +711,55 @@ void ModuleTest::configDirCreatedAfterStartupIsWatchedAndCaptureRuns()
     // current activity's profile.
     writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
     QTest::qWait(400); // directory watch -> file watch -> coalescing -> capture
+
+    QVERIFY(storePtr->saves >= 1);
+    QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
+             QStringLiteral("firefox.desktop"));
+
+    // Leave the shared config dir present for the tests that follow.
+    QDir().mkpath(configDir());
+}
+
+// Ticket 25: a config directory that is deleted and recreated while the module
+// runs must be picked up again. The ticket-10 review note judged this broken
+// (the config-dir watch dropped on deletion, with no ancestor left to notice
+// the recreation), but the current module re-arms onto the nearest existing
+// ancestor from the directoryChanged handler, so the recreation re-establishes
+// the watch and later edits are still captured. Pin that behaviour end to end:
+// delete the (watched) config dir, recreate it, create mimeapps.list in it, and
+// assert the edit is captured into the current activity's profile.
+void ModuleTest::configDirDeletedAndRecreatedIsRewatchedAndCaptureRuns()
+{
+    // Start with a config dir (and a browser default) the module watches from
+    // construction, exactly as a running session would.
+    QVERIFY(QDir().mkpath(configDir()));
+    writeBrowserDefault(configDir(), QStringLiteral("chromium.desktop"));
+
+    auto backend = std::make_unique<FakeBackend>();
+    backend->setRunning(true);
+    backend->setActivities({Activity{QStringLiteral("work-id"), QStringLiteral("Work")}});
+    backend->setCurrentActivity(QStringLiteral("work-id"));
+    auto resolver = std::make_unique<FakeResolver>();
+    auto store = std::make_unique<FakeStore>();
+    auto *storePtr = store.get();
+
+    ActivityDefaultsSwitcherModule module(nullptr, std::move(backend), std::move(resolver),
+                                          std::make_unique<FakeWriter>(), std::move(store));
+
+    // The config directory (the watched path itself) is removed while the
+    // module runs; QFileSystemWatcher drops that watch, so the module must
+    // re-arm onto the nearest surviving ancestor on the doom event.
+    QVERIFY(QDir(configDir()).removeRecursively());
+    QTest::qWait(400); // let the deletion settle (watch re-armed on the ancestor)
+
+    // The directory is recreated (as on a fresh login): the ancestor event must
+    // upgrade the watch back onto the config directory itself.
+    QVERIFY(QDir().mkpath(configDir()));
+    QTest::qWait(400);
+
+    // A config file created now must still be observed and its edit captured.
+    writeBrowserDefault(configDir(), QStringLiteral("firefox.desktop"));
+    QTest::qWait(450); // directory watch -> file watch -> coalescing -> capture
 
     QVERIFY(storePtr->saves >= 1);
     QCOMPARE(storePtr->saved.value(QStringLiteral("work-id")).bindingFor(Component::Browser),
