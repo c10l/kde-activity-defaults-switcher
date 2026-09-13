@@ -11,10 +11,15 @@
 
 **Status:** ready-for-agent
 
-- [ ] Both boundaries are verified against `tests/kcm_qml/` and `kcm/kcm.cpp`, with the findings reported.
-- [ ] The user is grilled on which boundary to close and the approach, before any code changes.
+- [x] Both boundaries are verified against `tests/kcm_qml/` and `kcm/kcm.cpp`, with the findings reported.
+- [x] The user is grilled on which boundary to close and the approach, before any code changes.
 - [ ] If acted on: each agreed boundary is closed and pinned by a test that fails when the relevant behaviour is broken (shell-wiring drift causes a smoke failure; zero activities renders the empty state and disables editing).
 - [ ] If declined: the decision and rationale are recorded in this ticket.
+
+**Note from review of 24:** Reviewed at `b2671cf`. Verdict: **approve with fixes** — not marked done. Both boundaries are closed in code (single shared `KcmShell`; empty state rendered and editing disabled), `ctest` is 7/7 with full deps and 5/5 deps-limited, and `format-check`/`tidy` are clean. The "If declined" box is not applicable (both boundaries were acted on). Two non-blocking coverage gaps remain:
+
+- [ ] `KcmShell::load()` forwarding is shared but not pinned by a test: the smoke suite drives `m_backend->load()` directly and never calls `m_module->load()` (no System Settings host offscreen), so a regression where `load()` stops forwarding to `backend()->load()` would not fail `kcm-qml` (confirmed empirically: a no-op `load()` still passes). Add an assertion that drives `m_module->load()` and observes the backend re-reading the store.
+- [ ] The empty-state test asserts the selector and rows are hidden + disabled, but not the Reset button, which also received `enabled: kcm.backend.hasActivities`. Extend `emptyStateHidesPickersAndDisablesEditing` to assert the Reset button is disabled with zero activities.
 
 **Note from review of 23:** Ticket 23 (`d2e68e3`) widened boundary 1: it added `setSupportsInstantApply(false)`, a `hasPendingChangesChanged → setNeedsSave` connection, and a `save()` override to `kcm/kcm.cpp`, none of which the smoke shell (`tests/kcm_qml/kcm_smoke_module.cpp`) reproduces. When this ticket is worked, treat that wiring as part of the drift to close (either load the production module/plugin or mirror and pin the wiring), not just the pre-existing `backend`/enum/`load()` items.
 
