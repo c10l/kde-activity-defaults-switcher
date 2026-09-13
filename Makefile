@@ -54,9 +54,11 @@ build: $(BUILD_DIR)/CMakeCache.txt
 
 install: build
 	$(CMAKE) --install $(BUILD_DIR)
+	kquitapp6 kded6
 
 uninstall:
 	$(CMAKE) --build $(BUILD_DIR) --target uninstall
+	kquitapp6 kded6
 
 test: build
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
