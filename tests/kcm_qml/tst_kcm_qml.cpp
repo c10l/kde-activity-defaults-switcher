@@ -81,7 +81,11 @@ public:
 class FakeStore : public ProfileStore
 {
 public:
-    QMap<ActivityId, Profile> load() const override { return loaded; }
+    QMap<ActivityId, Profile> load() const override
+    {
+        ++loads;
+        return loaded;
+    }
     void save(const QMap<ActivityId, Profile> &profiles) const override
     {
         ++saves;
@@ -89,6 +93,7 @@ public:
     }
 
     QMap<ActivityId, Profile> loaded;
+    mutable int loads = 0;
     mutable int saves = 0;
     mutable QMap<ActivityId, Profile> saved;
 };
@@ -149,6 +154,18 @@ QObject *activitySelector(QQuickItem *root)
     const QList<QObject *> children = root->findChildren<QObject *>();
     for (QObject *object : children) {
         if (QString(object->metaObject()->className()).startsWith(QStringLiteral("ComboBox"))) {
+            return object;
+        }
+    }
+    return nullptr;
+}
+
+// The Reset button (the only QQC2.Button whose text is "Reset").
+QObject *resetButton(QQuickItem *root)
+{
+    for (QObject *object : root->findChildren<QObject *>()) {
+        if (QString(object->metaObject()->className()).startsWith(QStringLiteral("Button")) &&
+            object->property("text").toString() == QStringLiteral("Reset")) {
             return object;
         }
     }
@@ -426,6 +443,13 @@ void KcmQmlSmokeTest::shellWiringAppliesOnApplyNotInstantly()
     QCOMPARE(m_module->supportsInstantApply(), false);
     QCOMPARE(m_module->needsSave(), false);
     const int savesBefore = m_store->saves;
+    const int loadsBefore = m_store->loads;
+
+    // load() must forward to backend()->load(), which re-reads the store. The
+    // smoke suite otherwise only drives the backend directly, so a shell whose
+    // load() stopped forwarding would silently ship.
+    m_module->load();
+    QCOMPARE(m_store->loads, loadsBefore + 1);
 
     // Edit through the backend's public API (the view's gesture path).
     m_backend->setSelectedActivityId(QStringLiteral("work-id"));
@@ -461,6 +485,14 @@ void KcmQmlSmokeTest::emptyStateHidesPickersAndDisablesEditing()
                  !emptyStatePlaceholder(root)->property("visible").toBool(),
              "the empty-state placeholder was visible with activities present");
 
+    QObject *reset = resetButton(root);
+    QVERIFY2(reset, "no Reset button rendered");
+    if (!reset) {
+        return;
+    }
+    QVERIFY2(reset->property("enabled").toBool(),
+             "the Reset button was disabled with activities present");
+
     // Drive the view to the empty state through the backend's public API.
     m_activityBackend->activities.clear();
     m_backend->load();
@@ -482,6 +514,9 @@ void KcmQmlSmokeTest::emptyStateHidesPickersAndDisablesEditing()
              "the activity selector was visible with zero activities");
     QVERIFY2(!selector->property("enabled").toBool(),
              "the activity selector was enabled with zero activities");
+
+    QVERIFY2(!reset->property("enabled").toBool(),
+             "the Reset button was enabled with zero activities");
 
     const QList<QQuickItem *> rows = componentRows(root);
     QVERIFY2(!rows.isEmpty(), "no component rows were instantiated at all");
