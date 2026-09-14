@@ -15,12 +15,22 @@ The module still autoloads and runs (verified below), but it is never registered
 
 **Blocked by:** none.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The kded plugin's `KPluginMetaData::pluginId()` is a valid D-Bus path element (matches `[A-Za-z0-9_]+`) and is no longer `activity-defaults-switcher-kded`.
-- [ ] A live kded6 start with the module installed produces no `The kded module name ... is invalid!` / `invalid path "/modules/..."` warning for this module (`kquitapp6 kded6`, restart, then `journalctl --user -b | grep -iE 'invalid path|module name .*is invalid'` shows nothing for it).
-- [ ] The module still autoloads and works: `org.kde.kded6.isModuleAutoloaded <id>` is `true`, it appears in `loadedModules`, and the ticket-04 end-to-end check still holds (switch activity → the current activity's binding is applied).
-- [ ] A regression test pins the valid plugin id — e.g. a test that loads the built plugin's `KPluginMetaData` (via a `$<TARGET_FILE:...>` compile definition, guarded like the KCM smoke plugin when the kded deps are present) and asserts the id is D-Bus-valid — verified red before the fix.
+- [x] The kded plugin's `KPluginMetaData::pluginId()` is a valid D-Bus path element (matches `[A-Za-z0-9_]+`) and is no longer `activity-defaults-switcher-kded`.
+- [x] A live kded6 start with the module installed produces no `The kded module name ... is invalid!` / `invalid path "/modules/..."` warning for this module (`kquitapp6 kded6`, restart, then `journalctl --user -b | grep -iE 'invalid path|module name .*is invalid'` shows nothing for it).
+- [x] The module still autoloads and works: `org.kde.kded6.isModuleAutoloaded <id>` is `true`, it appears in `loadedModules`, and the ticket-04 end-to-end check still holds (switch activity → the current activity's binding is applied).
+- [x] A regression test pins the valid plugin id — e.g. a test that loads the built plugin's `KPluginMetaData` (via a `$<TARGET_FILE:...>` compile definition, guarded like the KCM smoke plugin when the kded deps are present) and asserts the id is D-Bus-valid — verified red before the fix.
+
+**Note from review of 26:** Reviewed at `e6a49ac`. Verdict: **approve**, all four criteria met.
+
+- **AC1** — `KPluginMetaData::pluginId()` on the built plugin (`build/kde_activity_defaults_switcher.so`) is `kde_activity_defaults_switcher`, which matches `[A-Za-z0-9_]+`. The target name is the `.so` basename and, with no `KPlugin.Id` in `src/module.json`, the plugin id (approach b, underscored).
+- **AC2** — independently verified: the installed `/usr/lib/x86_64-linux-gnu/qt6/plugins/kf6/kded/kde_activity_defaults_switcher.so` dates from 18:56, the running kded6 started 18:59:05, and `journalctl --user -b` has no `invalid path` / `module name ... is invalid` line for this module since. Pre-fix entries (00:03, 00:59, 01:14) are present and did capture the old warnings, so the journal is a valid detector, not merely silent.
+- **AC3** — `org.kde.kded6.isModuleAutoloaded kde_activity_defaults_switcher` is `true`; the name appears in `loadedModules`; `/modules/kde_activity_defaults_switcher` introspects over D-Bus. The module's source is untouched by this ticket (only the target/`.so` name changed), so the ticket-04 resolve→apply path is unaffected and stays pinned by `tests/tst_module.cpp`; the implementer's live activity-switch check also held.
+- **AC4** — `tests/tst_module_metadata.cpp` loads the built plugin's real metadata via `ADS_KDED_PLUGIN="$<TARGET_FILE:kde_activity_defaults_switcher>"` and sits inside the same `KF6DBusAddons_FOUND AND PlasmaActivities_FOUND` guard as the module. Verified red independently: the same binary copied to the old hyphenated basename yields `pluginId == activity-defaults-switcher-kded`, which the D-Bus-element regex rejects; as built, green. A configure with both packages disabled is 5 tests (no `module-metadata`) and builds clean.
+- **Tests** — `ctest` 8/8 with full deps (including `module` and `module-metadata`); `clang-format --dry-run --Werror` clean on the new test.
+- **Process** — the implementer left Status and the boxes untouched; `e6a49ac` touches only `CMakeLists.txt` and the new test. Vocabulary clean; no ADR contradicted; no later-ticket scope.
+- **Non-blocking, corrected here:** `.scratch/kcm-component/issues/07-i18n.md` decision 1 used the old daemon name (`activity-defaults-switcher-kded`) as the naming parallel; that reference is now stale and has been corrected to the daemon's new id.
 
 **Suggested skills:** `work-ticket` (implementer — verify and grill the user on approach); `review-ticket` (reviewer).
 
