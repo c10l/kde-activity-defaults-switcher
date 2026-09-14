@@ -144,9 +144,15 @@ find_package(PlasmaActivities QUIET)
 if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
     # The module and its JSON are installed side by side into the kded plugin
     # directory; X-KDE-Kded-autoload makes kded6 load it at session start.
-    add_library(activity-defaults-switcher-kded MODULE src/module.cpp src/kactivities_backend.cpp src/module.json)
-    target_include_directories(activity-defaults-switcher-kded PRIVATE src)
-    target_link_libraries(activity-defaults-switcher-kded PRIVATE
+    # The target name is the `.so` basename and, with no KPlugin.Id in the JSON,
+    # the plugin id: kded6 names the module after pluginId() and builds a D-Bus
+    # object path "/modules/<id>" from it, whose elements may only contain
+    # letters, digits and underscores. The name is therefore underscored (ticket
+    # 26); a hyphenated one made kded6 log "The kded module name ... is invalid!"
+    # and skip D-Bus registration at every start.
+    add_library(kde_activity_defaults_switcher MODULE src/module.cpp src/kactivities_backend.cpp src/module.json)
+    target_include_directories(kde_activity_defaults_switcher PRIVATE src)
+    target_link_libraries(kde_activity_defaults_switcher PRIVATE
         ads-switcher
         ads-activities
         KF6::DBusAddons
@@ -154,7 +160,7 @@ if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
         KF6::CoreAddons
     )
 
-    install(TARGETS activity-defaults-switcher-kded
+    install(TARGETS kde_activity_defaults_switcher
         DESTINATION ${KDE_INSTALL_PLUGINDIR}/kf6/kded)
     install(FILES src/module.json
         DESTINATION ${KDE_INSTALL_PLUGINDIR}/kf6/kded)
@@ -178,6 +184,19 @@ if(KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
         Qt6::Test
     )
     add_test(NAME module COMMAND tst_module)
+
+    # Ticket 26: the module's plugin id must be a valid D-Bus path element.
+    # kded6 builds "/modules/<id>" from KPluginMetaData::pluginId() and rejects
+    # hyphens, so an invalid id makes kded6 warn at every start and never
+    # register the module as a D-Bus object. This test loads the built plugin's
+    # real metadata (the file kded6 reads), so it fails red on the old
+    # hyphenated id and green once the plugin carries a D-Bus-valid id.
+    add_executable(tst_module_metadata tests/tst_module_metadata.cpp)
+    target_link_libraries(tst_module_metadata PRIVATE KF6::CoreAddons Qt6::Test)
+    target_compile_definitions(tst_module_metadata PRIVATE
+        ADS_KDED_PLUGIN="$<TARGET_FILE:kde_activity_defaults_switcher>")
+    add_dependencies(tst_module_metadata kde_activity_defaults_switcher)
+    add_test(NAME module-metadata COMMAND tst_module_metadata)
 endif()
 
 # --- KCM (System Settings module, ticket 07) ---
