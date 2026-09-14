@@ -22,6 +22,27 @@ KcmBackend::KcmBackend(std::unique_ptr<ActivityBackend> activityBackend,
       m_store(store ? std::move(store) : std::make_unique<ProfileStore>()),
       m_rows(new ComponentRowsModel(this))
 {
+    // KActivities::Consumer populates asynchronously: at the moment System
+    // Settings calls load() it can still report only the nameless null
+    // activity, with the real list (and names) arriving a moment later via
+    // activitiesChanged / runningChanged. The KCM is a snapshot editor and does
+    // not live-refresh, but it must complete that initial snapshot - otherwise
+    // it opens on "No activities to configure". The guard means a snapshot that
+    // already has activities is never rebuilt, so a later add/remove cannot
+    // discard edits the user has buffered. activitiesRenamed covers a name that
+    // synchronizes after the list does (a fresh KActivities::Info starts empty,
+    // and a nameless activity is filtered out of the snapshot).
+    const auto completeInitialSnapshot = [this]() {
+        if (m_activities.isEmpty()) {
+            load();
+        }
+    };
+    connect(m_activityBackend.get(), &ActivityBackend::activitiesChanged, this,
+            completeInitialSnapshot);
+    connect(m_activityBackend.get(), &ActivityBackend::runningChanged, this,
+            completeInitialSnapshot);
+    connect(m_activityBackend.get(), &ActivityBackend::activitiesRenamed, this,
+            completeInitialSnapshot);
 }
 
 void KcmBackend::load()

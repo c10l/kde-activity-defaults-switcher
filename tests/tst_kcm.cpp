@@ -37,6 +37,17 @@ public:
         return {};
     }
 
+    // Simulates the asynchronous KActivities delivery: the real activity list
+    // (and current id) arrive after the initial load, then the change is
+    // announced, exactly as KActivities::Consumer does once its service
+    // synchronizes.
+    void reportActivitiesArrived(const QList<Activity> &next, const QString &current)
+    {
+        activities = next;
+        currentId = current;
+        Q_EMIT activitiesChanged();
+    }
+
     QString currentId;
     QList<Activity> activities;
 };
@@ -103,6 +114,7 @@ private slots:
 
     void listsEveryActivityInCanonicalOrder();
     void emptyStateWhenNoActivities();
+    void completesSnapshotWhenActivitiesArriveLate();
     void defaultsSelectionToCurrentActivity();
     void defaultsSelectionToFirstWhenCurrentNotListed();
     void baselinePrefersActivityNamedDefault();
@@ -198,6 +210,37 @@ void KcmTest::emptyStateWhenNoActivities()
     QCOMPARE(backend.componentRows()->rowCount(), 13);
     QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::BindingSourceRole).toInt(),
              static_cast<int>(BindingSource::Unset));
+}
+
+// KActivities::Consumer reports its activities asynchronously: when the KCM
+// opens, the backend still lists only the nameless null activity, and the real
+// list (with names) arrives a moment later via activitiesChanged. The KCM is a
+// snapshot editor, but it must complete that initial snapshot - otherwise it
+// opens on "No activities to configure".
+void KcmTest::completesSnapshotWhenActivitiesArriveLate()
+{
+    auto activity = std::make_unique<FakeActivityBackend>();
+    // What the real consumer returns before the service has synchronized: the
+    // null activity, whose empty name the backend filters out.
+    activity->activities = {
+        Activity{QStringLiteral("00000000-0000-0000-0000-000000000000"), QString()}};
+    FakeActivityBackend *activityBackend = activity.get();
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::make_unique<FakeStore>());
+    backend.load();
+    QVERIFY(!backend.hasActivities());
+
+    // The service synchronizes: the real activities arrive.
+    activityBackend->reportActivitiesArrived(
+        {Activity{QStringLiteral("work-id"), QStringLiteral("Work")},
+         Activity{QStringLiteral("def-id"), QStringLiteral("Default")}},
+        QStringLiteral("work-id"));
+
+    QVERIFY(backend.hasActivities());
+    QCOMPARE(backend.activities().size(), 2);
+    QCOMPARE(backend.selectedActivityId(), QStringLiteral("work-id"));
+    QCOMPARE(backend.baselineActivityId(), QStringLiteral("def-id"));
 }
 
 void KcmTest::defaultsSelectionToCurrentActivity()
