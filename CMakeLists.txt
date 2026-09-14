@@ -15,6 +15,14 @@ set(BUILD_SHARED_LIBS ON)
 # The static libraries are linked into the kded6 shared module, so they must
 # be position-independent.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# KDE plugins carry no "lib" prefix. This is normally set by ECM's
+# KDECMakeSettings, but that module also installs an `uninstall` target that
+# collides with the one this project defines below, so set it directly.
+# It matters beyond cosmetics: KPluginMetaData::pluginId() falls back to the
+# plugin filename, and both KQuickConfigModule's QML resource lookup
+# (/kcm/<pluginId>/main.qml) and kded6's module lookup key off that id, so a
+# "lib" prefix makes both miss ("Could not find resource .../main.qml").
+set(CMAKE_SHARED_MODULE_PREFIX "")
 
 # KDE install locations (${KDE_INSTALL_PLUGINDIR}, ${KDE_INSTALL_KCMDIR}, …)
 # used by the install() rules below. Included before find_package(Qt6) so
