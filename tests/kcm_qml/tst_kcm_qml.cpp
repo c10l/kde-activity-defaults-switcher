@@ -230,6 +230,13 @@ class KcmQmlSmokeTest : public QObject
 {
     Q_OBJECT
 
+public:
+    // QTEST_MAIN constructs QGuiApplication - and so selects the platform
+    // plugin - before any test slot runs, so the offscreen choice has to be
+    // made here. Setting it in initTestCase() is too late: a headless runner
+    // aborts trying to load xcb before the first test even starts.
+    static void initMain();
+
 private slots:
     void initTestCase();
 
@@ -262,13 +269,16 @@ private:
     QStringList m_qmlWarnings;
 };
 
+void KcmQmlSmokeTest::initMain()
+{
+    qputenv("QT_QPA_PLATFORM", "offscreen");
+}
+
 void KcmQmlSmokeTest::initTestCase()
 {
-    // The offscreen platform plugin plus a plugin path CMake bakes in. The path
-    // is a compile definition (not argv) so QtTest does not mistake it for a
-    // test function name.
-    qputenv("QT_QPA_PLATFORM", "offscreen");
-
+    // The smoke plugin path CMake bakes in is a compile definition (not argv)
+    // so QtTest does not mistake it for a test function name. The platform is
+    // selected in initMain(), before QGuiApplication exists.
     const QString pluginFile = QStringLiteral(ADS_KCM_SMOKE_PLUGIN);
     QVERIFY2(QFile::exists(pluginFile),
              qPrintable(QStringLiteral("smoke plugin not found: %1").arg(pluginFile)));
