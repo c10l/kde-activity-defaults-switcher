@@ -95,6 +95,13 @@ enumeration source in `ApplicationTraderBackend`).
   QString it returned killed System Settings inside `QMimeDatabase`. Fixed and
   pinned in ticket 28; the smoke suite could not catch it because its fake
   `ApplicationBackend` tolerated any `Component`.
+- **Follow-up from ticket 29 — this ticket's picker delegate broke the
+  dropdown.** `ComponentComboBox`'s entry delegate was written for Qt's Basic
+  style (`width: ListView.view.width`, the `model` context property); the KDE
+  styles host the entries in a Menu popup, where `ListView.view` is null, so
+  every entry rendered empty and the popup collapsed to a 28px strip. Fixed and
+  pinned in ticket 29, which also makes the smoke suite run under
+  `org.kde.desktop` so this shape is exercised.
 - Tooling drift (not this ticket's scope, recorded in ticket 18): with
   Homebrew LLVM clang-tidy 23, `make tidy` fails on *any* file — including
   untouched ones — with `Error: no checks enabled.`, because the repo carries no
