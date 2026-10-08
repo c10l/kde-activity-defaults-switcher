@@ -11,11 +11,12 @@ namespace ads {
 // component chooser defines them (plasma-workspace kcms/componentchooser),
 // plus text/html for the browser so .html files and links both follow the
 // activity. The terminal component has no mime keys: it is stored in
-// kdeglobals instead.
+// kdeglobals instead. A value that is not a Component yields nothing.
 QStringList mimeKeysFor(Component component);
 
 // The canonical mime type a component's "current default" is read through -
-// the same key the System Settings component chooser uses to load it.
+// the same key the System Settings component chooser uses to load it. A value
+// that is not a Component yields an empty string.
 QString primaryMimeTypeFor(Component component);
 
 // The current default application of every mime component, read directly from

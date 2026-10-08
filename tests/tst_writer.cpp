@@ -60,6 +60,7 @@ private slots:
     void mimeKeyListsPinAgainstDrift();
     void everyNonTerminalComponentHasMimeKeys();
     void everyNonTerminalComponentHasAPrimaryMimeType();
+    void nonComponentHasNoMimeKeys();
     void primaryMimeTypeIsTheComponentChooserCanonicalKey();
     void readCurrentMimeDefaultsReadsPrimaryKeys();
     void readCurrentMimeDefaultsIsEmptyWithoutFile();
@@ -426,6 +427,20 @@ void WriterTest::everyNonTerminalComponentHasAPrimaryMimeType()
                 QStringLiteral("primaryMimeTypeFor(%%1) is empty").arg(componentKey(component))));
     }
     QVERIFY(primaryMimeTypeFor(Component::Terminal).isEmpty());
+}
+
+void WriterTest::nonComponentHasNoMimeKeys()
+{
+    // A value that is not a Component must yield nothing, not undefined
+    // behaviour. These functions are reachable from a plain int (a KCM view row
+    // that is a section heading carries -1), and a fall-through to
+    // Q_UNREACHABLE() there is UB: the caller received a garbage QString and
+    // crashed KApplicationTrader/QMimeDatabase with it, taking the KCM down.
+    for (const Component notAComponent :
+         {static_cast<Component>(-1), Component::Count, static_cast<Component>(99)}) {
+        QVERIFY(mimeKeysFor(notAComponent).isEmpty());
+        QVERIFY(primaryMimeTypeFor(notAComponent).isEmpty());
+    }
 }
 
 void WriterTest::primaryMimeTypeIsTheComponentChooserCanonicalKey()

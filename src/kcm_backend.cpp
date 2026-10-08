@@ -169,10 +169,15 @@ QVariantList KcmBackend::pickerEntries(int component) const
 {
     QVariantList entries;
 
+    // A row that is not a Component (a section heading carries -1) has no
+    // picker entries at all; converting it would put a value outside the enum
+    // into the domain.
+    if (!isValidComponent(component)) {
+        return entries;
+    }
     const Component selected = static_cast<Component>(component);
-    const bool isComponent = selected < Component::Count;
-    const std::optional<Application> baselineBinding =
-        isComponent ? baselineProfile().bindingFor(selected) : std::nullopt;
+
+    const std::optional<Application> baselineBinding = baselineProfile().bindingFor(selected);
 
     QVariantMap inherit;
     inherit.insert(QStringLiteral("storageId"), QString());
@@ -188,10 +193,6 @@ QVariantList KcmBackend::pickerEntries(int component) const
                                 m_applicationBackend->displayNameFor(*baselineBinding))
                        : i18nd(kcmTranslationDomain, "Inherit"));
     entries.append(inherit);
-
-    if (!isComponent) {
-        return entries;
-    }
 
     QList<ApplicationCandidate> candidates = m_applicationBackend->applicationsFor(selected);
 
@@ -229,13 +230,10 @@ void KcmBackend::setBinding(int component, const QString &application)
         clearBinding(component);
         return;
     }
-    if (m_selectedActivityId.isEmpty()) {
+    if (m_selectedActivityId.isEmpty() || !isValidComponent(component)) {
         return;
     }
     const Component selected = static_cast<Component>(component);
-    if (selected >= Component::Count) {
-        return;
-    }
 
     m_profiles[m_selectedActivityId].setBinding(selected, application);
     markPending();
@@ -244,13 +242,10 @@ void KcmBackend::setBinding(int component, const QString &application)
 
 void KcmBackend::clearBinding(int component)
 {
-    if (m_selectedActivityId.isEmpty()) {
+    if (m_selectedActivityId.isEmpty() || !isValidComponent(component)) {
         return;
     }
     const Component selected = static_cast<Component>(component);
-    if (selected >= Component::Count) {
-        return;
-    }
 
     m_profiles[m_selectedActivityId].removeBinding(selected);
     markPending();

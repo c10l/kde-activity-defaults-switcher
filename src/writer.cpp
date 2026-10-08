@@ -181,7 +181,10 @@ QStringList mimeKeysFor(Component component)
         // The trailing count sentinel is never a component.
         break;
     }
-    Q_UNREACHABLE();
+    // Not a Component at all: a KCM row that is a section heading carries -1
+    // and can reach here through a plain int. No keys, never undefined
+    // behaviour - the caller must not receive a garbage list.
+    return {};
 }
 
 QString primaryMimeTypeFor(Component component)
@@ -219,7 +222,10 @@ QString primaryMimeTypeFor(Component component)
         // The trailing count sentinel is never a component.
         break;
     }
-    Q_UNREACHABLE();
+    // Not a Component at all (see mimeKeysFor): no primary key rather than
+    // undefined behaviour. A garbage QString here is what crashed the KCM in
+    // KApplicationTrader/QMimeDatabase.
+    return QString();
 }
 
 QMap<Component, Application> readCurrentMimeDefaults()

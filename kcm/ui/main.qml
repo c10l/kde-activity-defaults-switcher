@@ -148,8 +148,12 @@ KCMUtils.SimpleKCM {
                         font.italic: formRow.bindingSource === Ads.BindingSource.Fallback
                         // The Inherit entry's label depends on the baseline, so
                         // refresh the list after an edit (the extra reads are the
-                        // dependencies that make the binding re-evaluate).
+                        // dependencies that make the binding re-evaluate). A
+                        // section heading has no entries to ask for.
                         model: {
+                            if (formRow.isSection) {
+                                return []
+                            }
                             formRow.effectiveApplication
                             formRow.bindingSource
                             return kcm.backend.pickerEntries(formRow.component)

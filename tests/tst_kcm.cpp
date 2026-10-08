@@ -170,6 +170,7 @@ private slots:
 
     void componentRowsExposeEveryComponent();
     void componentGroupsFollowTheDefaultApplicationsPage();
+    void invalidComponentIsRejected();
     void rowSourceIsExplicitForOwnBinding();
     void rowSourceIsFallbackForBaselineBinding();
     void rowSourceIsUnsetWhenNeitherBinds();
@@ -441,6 +442,44 @@ void KcmTest::componentGroupsFollowTheDefaultApplicationsPage()
                     static_cast<int>(TextEditor), static_cast<int>(PdfViewer),
                     static_cast<int>(FileManager), static_cast<int>(Terminal),
                     static_cast<int>(ArchiveManager), static_cast<int>(Geo)}));
+}
+
+// A view row that is not a Component must be rejected at the backend boundary.
+// A section-heading row carries component -1, and the old check
+// (`selected < Component::Count`) is true for every negative value, so -1 was
+// converted to a Component and travelled into the domain: primaryMimeTypeFor()
+// fell out of its enum switch into Q_UNREACHABLE(), and the garbage QString it
+// returned crashed the KCM inside QMimeDatabase.
+void KcmTest::invalidComponentIsRejected()
+{
+    Profile work;
+    work.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
+
+    auto store = std::make_unique<FakeStore>();
+    store->loaded = {{QStringLiteral("work-id"), work}};
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::move(store));
+    backend.load();
+
+    for (const int notAComponent : {-1, static_cast<int>(Component::Count), 99}) {
+        QVERIFY2(
+            backend.pickerEntries(notAComponent).isEmpty(),
+            qPrintable(QStringLiteral("pickerEntries(%1) offered entries").arg(notAComponent)));
+
+        backend.setBinding(notAComponent, QStringLiteral("konsole.desktop"));
+        backend.clearBinding(notAComponent);
+    }
+
+    // Nothing was bound, nothing was buffered, and the real rows are untouched.
+    QVERIFY(!backend.hasPendingChanges());
+    QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::EffectiveApplicationRole)
+                 .toString(),
+             QStringLiteral("firefox.desktop"));
 }
 
 void KcmTest::rowSourceIsExplicitForOwnBinding()

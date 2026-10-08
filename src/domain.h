@@ -54,6 +54,16 @@ enum class Component {
 // always returned here - allComponents() cannot silently miss one.
 QList<Component> allComponents();
 
+// Whether an int from outside the domain is a real Component. Row values reach
+// the backend as plain ints (a KCM row's `component`), and a row that is not a
+// Component - a section heading - carries -1; a signed comparison against Count
+// alone accepts every negative value, and converting one to Component only to
+// fall out of an enum switch is undefined behaviour.
+inline bool isValidComponent(int value)
+{
+    return value >= 0 && value < static_cast<int>(Component::Count);
+}
+
 // The stable config key for a component (used as the profile store's group
 // name). Keys are unique and never change once written.
 QString componentKey(Component component);

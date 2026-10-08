@@ -67,6 +67,9 @@ class FakeApplicationBackend : public ApplicationBackend
 public:
     QList<ApplicationCandidate> applicationsFor(Component component) const override
     {
+        // Recorded so a test can pin which Components the view asks about (a
+        // section heading must never be asked about - its component is -1).
+        requestedComponents << static_cast<int>(component);
         return candidates.value(component);
     }
     QString displayNameFor(const Application &application) const override
@@ -81,6 +84,8 @@ public:
     QMap<Component, QList<ApplicationCandidate>> candidates;
     QHash<Application, QString> names;
     QHash<Application, QString> icons;
+    // Every Component the view has asked about, in order.
+    mutable QList<int> requestedComponents;
 };
 
 // A fake ProfileStore returning a scripted snapshot.
@@ -223,6 +228,7 @@ private slots:
     void viewLoadsWithoutWarningsOrErrors();
     void formGroupsComponentsLikeTheDefaultApplicationsPage();
     void switchingActivityRetargetsThePickers();
+    void pickersAreOnlyAskedForRealComponents();
     void explicitBindingRowShowsTheBoundApplication();
     void fallbackBindingRowShowsTheBaselineApplication();
     void unsetComponentRowShowsTheInheritEntry();
@@ -241,6 +247,7 @@ private:
     // drive the view (the empty state) or observe the apply path (save()).
     FakeStore *m_store = nullptr;
     FakeActivityBackend *m_activityBackend = nullptr;
+    FakeApplicationBackend *m_applications = nullptr;
     // The engine handed to the module loader, so the test can observe its
     // warnings from the moment mainUi() loads the view (module.engine() is only
     // meaningful after that).
@@ -286,6 +293,7 @@ void KcmQmlSmokeTest::initTestCase()
     m_activityBackend = activityBackend.get();
 
     auto applications = std::make_unique<FakeApplicationBackend>();
+    m_applications = applications.get();
     applications->candidates.insert(
         Component::Browser,
         {
@@ -427,6 +435,30 @@ void KcmQmlSmokeTest::switchingActivityRetargetsThePickers()
     QCOMPARE(archive->property("currentValue").toString(), QStringLiteral("org.kde.ark.desktop"));
     QCOMPARE(archive->property("currentText").toString(), QStringLiteral("Ark"));
     QCOMPARE(browser->property("currentValue").toString(), QStringLiteral("firefox.desktop"));
+}
+
+// The form is populated from the backend's rows, which include one
+// section-heading row per section. A heading is not a Component - its
+// component is -1 - and the view must not ask the backend for a heading's
+// picker entries: the invalid value used to reach primaryMimeTypeFor()'s
+// Q_UNREACHABLE(), and the garbage mime it returned crashed the KCM once a real
+// enumeration backend was behind it.
+void KcmQmlSmokeTest::pickersAreOnlyAskedForRealComponents()
+{
+    QQuickItem *root = m_module->mainUi();
+    QVERIFY(root);
+
+    // Re-evaluate every row's picker (an activity switch refreshes all rows).
+    m_backend->setSelectedActivityId(QStringLiteral("default-id"));
+    m_backend->setSelectedActivityId(QStringLiteral("work-id"));
+
+    QVERIFY2(!m_applications->requestedComponents.isEmpty(),
+             "the view never asked the backend for picker entries");
+    for (const int component : m_applications->requestedComponents) {
+        QVERIFY2(component >= 0 && component < static_cast<int>(Component::Count),
+                 qPrintable(QStringLiteral("the view asked for the picker entries of component %1")
+                                .arg(component)));
+    }
 }
 
 void KcmQmlSmokeTest::explicitBindingRowShowsTheBoundApplication()
