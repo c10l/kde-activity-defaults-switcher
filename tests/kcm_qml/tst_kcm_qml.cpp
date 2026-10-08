@@ -26,8 +26,11 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QJsonObject>
+#include <QLibraryInfo>
+#include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QTimer>
 #include <QtTest>
 
@@ -119,6 +122,14 @@ QObject *comboForComponent(QQuickItem *root, Component component)
     return row ? row->findChild<QObject *>(QStringLiteral("componentPicker")) : nullptr;
 }
 
+// A Repeater item that is a form row: the desktop style also creates a Repeater
+// inside every ComboBox popup, and those items have no `component` property -
+// reading one as a row made them match component 0 (Browser).
+bool isFormRow(QQuickItem *item)
+{
+    return item && item->property("component").isValid();
+}
+
 QQuickItem *rowForComponent(QQuickItem *root, Component component)
 {
     for (QObject *object : root->findChildren<QObject *>()) {
@@ -130,12 +141,43 @@ QQuickItem *rowForComponent(QQuickItem *root, Component component)
             QQuickItem *row = nullptr;
             QMetaObject::invokeMethod(object, "itemAt", Qt::DirectConnection,
                                       Q_RETURN_ARG(QQuickItem *, row), Q_ARG(int, i));
-            if (row && row->property("component").toInt() == static_cast<int>(component)) {
+            if (isFormRow(row) &&
+                row->property("component").toInt() == static_cast<int>(component)) {
                 return row;
             }
         }
     }
     return nullptr;
+}
+
+// The entries a ComboBox popup renders. The KDE desktop style puts them in the
+// popup's own Menu item list (itemAt); the Breeze and Basic styles put them in
+// the popup's ListView (itemAtIndex). Each accessor is checked before it is
+// invoked, because inviting a method that does not exist logs a warning the
+// suite would fail on.
+QList<QQuickItem *> popupEntries(QObject *popup)
+{
+    QList<QQuickItem *> entries;
+    const auto collect = [&entries](QObject *source, const char *name, const char *signature) {
+        if (!source || source->metaObject()->indexOfMethod(signature) == -1) {
+            return;
+        }
+        for (int i = 0; i < source->property("count").toInt(); ++i) {
+            QQuickItem *item = nullptr;
+            if (QMetaObject::invokeMethod(source, name, Qt::DirectConnection,
+                                          Q_RETURN_ARG(QQuickItem *, item), Q_ARG(int, i)) &&
+                item) {
+                entries << item;
+            }
+        }
+    };
+
+    collect(popup, "itemAt", "itemAt(int)");
+    if (entries.isEmpty()) {
+        collect(qobject_cast<QQuickItem *>(popup->property("contentItem").value<QObject *>()),
+                "itemAtIndex", "itemAtIndex(int)");
+    }
+    return entries;
 }
 
 // The activity selector, found by its objectName. Its displayText marks the
@@ -186,7 +228,7 @@ QList<QQuickItem *> componentRows(QQuickItem *root)
             QQuickItem *row = nullptr;
             if (QMetaObject::invokeMethod(object, "itemAt", Qt::DirectConnection,
                                           Q_RETURN_ARG(QQuickItem *, row), Q_ARG(int, i)) &&
-                row) {
+                isFormRow(row)) {
                 rows << row;
             }
         }
@@ -229,6 +271,7 @@ private slots:
     void formGroupsComponentsLikeTheDefaultApplicationsPage();
     void switchingActivityRetargetsThePickers();
     void pickersAreOnlyAskedForRealComponents();
+    void pickerDropdownListsTheApplications();
     void explicitBindingRowShowsTheBoundApplication();
     void fallbackBindingRowShowsTheBaselineApplication();
     void unsetComponentRowShowsTheInheritEntry();
@@ -261,6 +304,18 @@ private:
 void KcmQmlSmokeTest::initMain()
 {
     qputenv("QT_QPA_PLATFORM", "offscreen");
+
+    // The KDE Quick Controls styles host a ComboBox's entries in a Menu popup
+    // instead of the control's ListView, and that shape is what broke the
+    // dropdown (see pickerDropdownListsTheApplications). Prefer the desktop
+    // style - what System Settings itself uses - when it is installed; where it
+    // is not (e.g. a minimal CI image), the default style is used and that test
+    // still holds, only with less coverage of the popup shape.
+    const QString desktopStyle = QLibraryInfo::path(QLibraryInfo::QmlImportsPath) +
+                                 QStringLiteral("/org/kde/desktop/ComboBox.qml");
+    if (!qEnvironmentVariableIsSet("QT_QUICK_CONTROLS_STYLE") && QFile::exists(desktopStyle)) {
+        qputenv("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop");
+    }
 }
 
 void KcmQmlSmokeTest::initTestCase()
@@ -459,6 +514,77 @@ void KcmQmlSmokeTest::pickersAreOnlyAskedForRealComponents()
                  qPrintable(QStringLiteral("the view asked for the picker entries of component %1")
                                 .arg(component)));
     }
+}
+
+// The picker's dropdown must render its entries. Opening a Popup needs a
+// window (the KCM's view is not shown in this suite), so the picker is loaded
+// on its own here. The KDE styles - the desktop one is what System Settings
+// uses - host the entries in a Menu popup, where an entry cannot size itself
+// from ListView.view (null there) and the model item has to be bound the way
+// the styles' own delegates bind it: getting that wrong left every entry empty
+// and the popup a ~28px strip of clipped text. Nothing caught it, because no
+// test ever opened a popup.
+void KcmQmlSmokeTest::pickerDropdownListsTheApplications()
+{
+    QQmlComponent component(m_engine.get(),
+                            QUrl(QStringLiteral("qrc:/kcm/ads-kcm-smoke/ComponentComboBox.qml")));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    std::unique_ptr<QQuickItem> picker(qobject_cast<QQuickItem *>(component.create()));
+    QVERIFY2(picker, qPrintable(component.errorString()));
+
+    // The entry shape KcmBackend::pickerEntries produces.
+    const QVariantList model{
+        QVariantMap{{QStringLiteral("storageId"), QString()},
+                    {QStringLiteral("displayName"), QStringLiteral("Inherit")},
+                    {QStringLiteral("icon"), QStringLiteral("edit-undo")},
+                    {QStringLiteral("isInheritEntry"), true}},
+        QVariantMap{{QStringLiteral("storageId"), QStringLiteral("org.kde.falkon.desktop")},
+                    {QStringLiteral("displayName"), QStringLiteral("Falkon")},
+                    {QStringLiteral("icon"), QStringLiteral("falkon")},
+                    {QStringLiteral("isInheritEntry"), false}},
+        QVariantMap{{QStringLiteral("storageId"), QStringLiteral("firefox.desktop")},
+                    {QStringLiteral("displayName"), QStringLiteral("Firefox")},
+                    {QStringLiteral("icon"), QStringLiteral("firefox")},
+                    {QStringLiteral("isInheritEntry"), false}},
+    };
+    picker->setProperty("model", model);
+    picker->setProperty("application", QStringLiteral("firefox.desktop"));
+    QCOMPARE(picker->property("currentValue").toString(), QStringLiteral("firefox.desktop"));
+    QCOMPARE(picker->property("currentText").toString(), QStringLiteral("Firefox"));
+
+    QQuickWindow window;
+    window.resize(400, 300);
+    window.setColor(Qt::white);
+    picker->setParentItem(window.contentItem());
+    picker->setWidth(320);
+    picker->setHeight(picker->implicitHeight());
+    window.show();
+
+    QObject *popup = picker->property("popup").value<QObject *>();
+    QVERIFY2(popup, "the picker has no popup");
+    QVERIFY(!popup->property("visible").toBool());
+
+    QVERIFY(QMetaObject::invokeMethod(popup, "open"));
+    QTRY_VERIFY_WITH_TIMEOUT(popup->property("visible").toBool(), 2000);
+
+    const QList<QQuickItem *> entries = popupEntries(popup);
+    QCOMPARE(entries.size(), 3);
+    QCOMPARE(entries.at(0)->property("text").toString(), QStringLiteral("Inherit"));
+    QCOMPARE(entries.at(1)->property("text").toString(), QStringLiteral("Falkon"));
+    QCOMPARE(entries.at(2)->property("text").toString(), QStringLiteral("Firefox"));
+
+    // Every entry is laid out at its popup's width - not collapsed to the width
+    // of an icon, which is what the broken delegate left behind (28px).
+    for (const QQuickItem *entry : entries) {
+        QVERIFY2(entry->width() >= entry->implicitWidth() && entry->width() > 100,
+                 qPrintable(QStringLiteral("entry '%1' is %2 wide (implicit %3)")
+                                .arg(entry->property("text").toString())
+                                .arg(entry->width())
+                                .arg(entry->implicitWidth())));
+    }
+
+    QVERIFY(QMetaObject::invokeMethod(popup, "close"));
+    QTRY_VERIFY_WITH_TIMEOUT(!popup->property("visible").toBool(), 2000);
 }
 
 void KcmQmlSmokeTest::explicitBindingRowShowsTheBoundApplication()

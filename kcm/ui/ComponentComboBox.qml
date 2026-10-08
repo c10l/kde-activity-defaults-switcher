@@ -52,10 +52,21 @@ QQC2.ComboBox {
     // styles simply draw no icon.
     Kirigami.StyleHints.iconName: (currentIndex >= 0 && currentIndex < count) ? (model[currentIndex].icon ?? "") : ""
 
-    delegate: QQC2.ItemDelegate {
-        width: ListView.view.width
-        highlighted: comboBox.highlightedIndex === index
-        text: model.displayName
+    // The entry rendering. The KDE styles host the entries in a Menu (a
+    // Repeater over the delegate model, or a Menu whose delegate is this one),
+    // not in the control's own ListView, so the entry must not size itself from
+    // ListView.view - that is null there, and the resulting TypeError left every
+    // entry empty and the popup 28px wide. Bind the model item as the styles'
+    // own delegates do, and follow the parent the style gives the entry (the
+    // Breeze delegate's idiom, which also works in Qt's Basic style, where the
+    // parent is the popup's ListView, already as wide as the control).
+    delegate: QQC2.MenuItem {
+        required property var model
+        required property int index
+
+        width: parent ? parent.width : implicitWidth
+        text: model[comboBox.textRole]
         icon.name: model.icon
+        highlighted: comboBox.highlightedIndex === index
     }
 }
