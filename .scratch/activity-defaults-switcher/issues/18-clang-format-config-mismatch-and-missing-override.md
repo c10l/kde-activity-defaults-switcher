@@ -27,6 +27,19 @@
 
 - The ticket's `AfterStruct: true` was a factual error: the committed style writes `struct Activity {` and `struct Binding {` with the brace on the same line (`src/domain.h`, unchanged before and after this ticket). `AfterStruct: true` would have moved those braces and failed criterion 2, contradicting the ticket's own "match the committed style" premise. The implementation's `AfterStruct: false` is correct and required; criterion 1 corrected accordingly.
 
+### Note from review of 27
+
+- `make tidy` cannot run with clang-tidy 23 (Homebrew LLVM 23.1.3): the repo
+  carries no `.clang-tidy`, and that version made the empty-check-set case fatal
+  — it exits 1 with `Error: no checks enabled.` before analysing anything, on
+  untouched files too (`src/domain.cpp`, and a file outside the repo). The
+  "`make tidy` reports no real warnings" criterion above therefore holds only
+  for the clang-tidy that was current when it was written (the Debian one CI
+  installs). Making the gate version-independent means pinning the check set — a
+  `.clang-tidy` with explicit `Checks`, or `--checks` in the `tidy` target. Which
+  checks to adopt is a project policy call, so it is recorded here rather than
+  changed under ticket 27.
+
 **Suggested skills:** `work-ticket`, `tdd` (implementer); `review-ticket` (reviewer).
 
 **References:**
