@@ -88,6 +88,13 @@ enumeration source in `ApplicationTraderBackend`).
   (`ComponentOverlay`), and `KCM.SettingHighlighter` (the KCM's analogue is the
   italic fallback marker, since "differs from the system default" has no
   per-Activity meaning here).
+- **Follow-up from ticket 28 — this ticket's section rows crashed the KCM.** The
+  heading rows carry `component = -1`, every row's picker evaluated
+  `pickerEntries(formRow.component)`, and that guard accepted the negative value,
+  so `-1` reached `primaryMimeTypeFor()`'s `Q_UNREACHABLE()` and the garbage
+  QString it returned killed System Settings inside `QMimeDatabase`. Fixed and
+  pinned in ticket 28; the smoke suite could not catch it because its fake
+  `ApplicationBackend` tolerated any `Component`.
 - Tooling drift (not this ticket's scope, recorded in ticket 18): with
   Homebrew LLVM clang-tidy 23, `make tidy` fails on *any* file — including
   untouched ones — with `Error: no checks enabled.`, because the repo carries no
