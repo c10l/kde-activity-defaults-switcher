@@ -66,7 +66,8 @@ public:
     // The picker's candidates for a component: the Inherit entry first (labelled
     // "Inherit (baseline: <name>)" when the baseline binds it, plain "Inherit"
     // otherwise), then the enumerated applications. Each entry is a map with
-    // storageId, displayName and isInheritEntry.
+    // storageId, displayName, icon (the themed icon name the picker shows) and
+    // isInheritEntry.
     Q_INVOKABLE QVariantList pickerEntries(int component) const;
     // Sets an explicit binding for the selected activity. Buffered, not saved.
     Q_INVOKABLE void setBinding(int component, const QString &application);

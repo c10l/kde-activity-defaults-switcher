@@ -17,6 +17,7 @@ class ApplicationTraderBackend : public ApplicationBackend
 public:
     QList<ApplicationCandidate> applicationsFor(Component component) const override;
     QString displayNameFor(const Application &application) const override;
+    QString iconNameFor(const Application &application) const override;
 };
 
 } // namespace ads

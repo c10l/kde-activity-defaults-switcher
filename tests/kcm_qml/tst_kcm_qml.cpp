@@ -12,7 +12,8 @@
 // The row state is the view's contract with the backend: an explicit binding
 // renders the bound Application, a fallback binding renders the baseline's
 // Application (italic), and an unset component renders the Inherit entry; the
-// activity selector marks the baseline activity.
+// activity selector marks the baseline activity, and the form groups the
+// components under the Default Applications page's category headings.
 
 #include "kcm_smoke_support.h"
 
@@ -72,9 +73,14 @@ public:
     {
         return names.value(application, application);
     }
+    QString iconNameFor(const Application &application) const override
+    {
+        return icons.value(application, QStringLiteral("application-x-executable"));
+    }
 
     QMap<Component, QList<ApplicationCandidate>> candidates;
     QHash<Application, QString> names;
+    QHash<Application, QString> icons;
 };
 
 // A fake ProfileStore returning a scripted snapshot.
@@ -98,33 +104,14 @@ public:
     mutable QMap<ActivityId, Profile> saved;
 };
 
-// The ComboBox of a component row, found among the RowLayout delegate's
-// children. The row itself is the Repeater delegate carrying `component`.
+QQuickItem *rowForComponent(QQuickItem *root, Component component);
+
+// The picker of a component row: the ComponentComboBox the row hosts, found by
+// its objectName (the row itself is the Repeater delegate carrying `component`).
 QObject *comboForComponent(QQuickItem *root, Component component)
 {
-    for (QObject *object : root->findChildren<QObject *>()) {
-        if (!QString(object->metaObject()->className()).contains(QStringLiteral("Repeater"))) {
-            continue;
-        }
-        const int count = object->property("count").toInt();
-        for (int i = 0; i < count; ++i) {
-            QQuickItem *row = nullptr;
-            const bool invoked =
-                QMetaObject::invokeMethod(object, "itemAt", Qt::DirectConnection,
-                                          Q_RETURN_ARG(QQuickItem *, row), Q_ARG(int, i));
-            if (!invoked || !row ||
-                row->property("component").toInt() != static_cast<int>(component)) {
-                continue;
-            }
-            for (QObject *child : row->children()) {
-                if (QString(child->metaObject()->className())
-                        .startsWith(QStringLiteral("ComboBox"))) {
-                    return child;
-                }
-            }
-        }
-    }
-    return nullptr;
+    QQuickItem *row = rowForComponent(root, component);
+    return row ? row->findChild<QObject *>(QStringLiteral("componentPicker")) : nullptr;
 }
 
 QQuickItem *rowForComponent(QQuickItem *root, Component component)
@@ -146,18 +133,11 @@ QQuickItem *rowForComponent(QQuickItem *root, Component component)
     return nullptr;
 }
 
-// The activity selector: the only ComboBox the view creates outside the
-// Repeater delegates (whose items are reached through itemAt), so it is the
-// only ComboBox in findChildren. Its displayText marks the baseline activity.
+// The activity selector, found by its objectName. Its displayText marks the
+// baseline activity.
 QObject *activitySelector(QQuickItem *root)
 {
-    const QList<QObject *> children = root->findChildren<QObject *>();
-    for (QObject *object : children) {
-        if (QString(object->metaObject()->className()).startsWith(QStringLiteral("ComboBox"))) {
-            return object;
-        }
-    }
-    return nullptr;
+    return root->findChild<QObject *>(QStringLiteral("activitySelector"));
 }
 
 // The Reset button (the only QQC2.Button whose text is "Reset").
@@ -241,6 +221,8 @@ private slots:
     void initTestCase();
 
     void viewLoadsWithoutWarningsOrErrors();
+    void formGroupsComponentsLikeTheDefaultApplicationsPage();
+    void switchingActivityRetargetsThePickers();
     void explicitBindingRowShowsTheBoundApplication();
     void fallbackBindingRowShowsTheBaselineApplication();
     void unsetComponentRowShowsTheInheritEntry();
@@ -284,9 +266,12 @@ void KcmQmlSmokeTest::initTestCase()
              qPrintable(QStringLiteral("smoke plugin not found: %1").arg(pluginFile)));
 
     // Work binds Browser explicitly; Default binds Email, which Work therefore
-    // sees as a fallback. Every other component is unset for both.
+    // sees as a fallback. Every other component is unset for both - except
+    // ArchiveManager, which Work binds to an Application the picker does not
+    // enumerate, so switching onto Work grows that picker's entry list.
     Profile work;
     work.setBinding(Component::Browser, QStringLiteral("firefox.desktop"));
+    work.setBinding(Component::ArchiveManager, QStringLiteral("org.kde.ark.desktop"));
     Profile baseline;
     baseline.setBinding(Component::Email, QStringLiteral("kmail.desktop"));
 
@@ -304,14 +289,17 @@ void KcmQmlSmokeTest::initTestCase()
     applications->candidates.insert(
         Component::Browser,
         {
-            ApplicationCandidate{QStringLiteral("falkon.desktop"), QStringLiteral("Falkon")},
-            ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox")},
+            ApplicationCandidate{QStringLiteral("falkon.desktop"), QStringLiteral("Falkon"),
+                                 QStringLiteral("falkon")},
+            ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox"),
+                                 QStringLiteral("firefox")},
         });
     applications->candidates.insert(
-        Component::Email,
-        {ApplicationCandidate{QStringLiteral("kmail.desktop"), QStringLiteral("KMail")}});
+        Component::Email, {ApplicationCandidate{QStringLiteral("kmail.desktop"),
+                                                QStringLiteral("KMail"), QStringLiteral("kmail")}});
     applications->names.insert(QStringLiteral("firefox.desktop"), QStringLiteral("Firefox"));
     applications->names.insert(QStringLiteral("kmail.desktop"), QStringLiteral("KMail"));
+    applications->names.insert(QStringLiteral("org.kde.ark.desktop"), QStringLiteral("Ark"));
 
     m_backend = std::make_unique<KcmBackend>(std::move(activityBackend), std::move(applications),
                                              std::move(store));
@@ -366,6 +354,79 @@ void KcmQmlSmokeTest::viewLoadsWithoutWarningsOrErrors()
     QVERIFY2(
         unique.isEmpty(),
         qPrintable(QStringLiteral("QML warnings/errors:\n%1").arg(unique.join(QLatin1Char('\n')))));
+}
+
+// The form is laid out like System Settings' Default Applications page:
+// components grouped under that page's category headings, each carrying that
+// page's label. FormLayout renders every row's Kirigami.FormData.label as a
+// heading beside the row, so a changed grouping or label lands here.
+void KcmQmlSmokeTest::formGroupsComponentsLikeTheDefaultApplicationsPage()
+{
+    QQuickItem *root = m_module->mainUi();
+    QVERIFY(root);
+
+    QStringList labels;
+    for (QObject *object : root->findChildren<QObject *>()) {
+        if (QString(object->metaObject()->className()).contains(QStringLiteral("Heading"))) {
+            labels << object->property("text").toString();
+        }
+    }
+    const QString joined = labels.join(QLatin1Char('\n'));
+    const auto hasLabel = [&labels](const QString &needle) {
+        for (const QString &text : labels) {
+            if (text.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // The category headings the two pages share.
+    for (const QString &section : {QStringLiteral("Internet"), QStringLiteral("Multimedia"),
+                                   QStringLiteral("Documents"), QStringLiteral("Utilities")}) {
+        QVERIFY2(hasLabel(section),
+                 qPrintable(QStringLiteral("missing heading %1 in:\n%2").arg(section, joined)));
+    }
+    // The Default Applications labels rather than bare component names.
+    QVERIFY2(
+        hasLabel(QStringLiteral("Web browser:")),
+        qPrintable(QStringLiteral("missing the Default Applications label in:\n%1").arg(joined)));
+}
+
+// Switching the selected Activity must move each picker onto the new profile's
+// Application. The row data and the picker's entry list are recomputed in the
+// same update but not necessarily in a helpful order, so the picker has to
+// re-derive its selection from both - otherwise the field keeps the previous
+// Activity's choice, or falls back to the Inherit entry, after a switch.
+void KcmQmlSmokeTest::switchingActivityRetargetsThePickers()
+{
+    QQuickItem *root = m_module->mainUi();
+    QVERIFY(root);
+
+    m_backend->setSelectedActivityId(QStringLiteral("work-id"));
+    QObject *browser = comboForComponent(root, Component::Browser);
+    QVERIFY(browser);
+    QCOMPARE(browser->property("currentValue").toString(), QStringLiteral("firefox.desktop"));
+    QCOMPARE(browser->property("currentText").toString(), QStringLiteral("Firefox"));
+
+    // Work binds Browser; Default does not, so the picker must move to the
+    // Inherit entry rather than keep showing Firefox.
+    m_backend->setSelectedActivityId(QStringLiteral("default-id"));
+    QCOMPARE(browser->property("currentValue").toString(), QString());
+    QCOMPARE(browser->property("currentText").toString(), QStringLiteral("Inherit"));
+
+    // Work also binds ArchiveManager to an Application the picker does not
+    // enumerate, so switching back onto Work grows the entry list in the same
+    // update: the picker must land on the bound Application, not stay on the
+    // Inherit entry its now-stale list pointed at.
+    QObject *archive = comboForComponent(root, Component::ArchiveManager);
+    QVERIFY(archive);
+    QCOMPARE(archive->property("currentText").toString(), QStringLiteral("Inherit"));
+
+    m_backend->setSelectedActivityId(QStringLiteral("work-id"));
+    QCOMPARE(archive->property("currentValue").toString(), QStringLiteral("org.kde.ark.desktop"));
+    QCOMPARE(archive->property("currentText").toString(), QStringLiteral("Ark"));
+    QCOMPARE(browser->property("currentValue").toString(), QStringLiteral("firefox.desktop"));
 }
 
 void KcmQmlSmokeTest::explicitBindingRowShowsTheBoundApplication()

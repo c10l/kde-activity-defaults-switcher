@@ -10,11 +10,13 @@
 
 namespace ads {
 
-// One Application the picker can offer: its storageId plus the name to display
-// (already translated by the desktop entry where one exists).
+// One Application the picker can offer: its storageId plus what the picker
+// renders - the name to display (already translated by the desktop entry where
+// one exists) and the themed icon name to show beside it.
 struct ApplicationCandidate {
     Application storageId;
     QString displayName;
+    QString iconName;
 };
 
 // Enumerates the Applications a Component's picker can offer. Behind this
@@ -33,6 +35,12 @@ public:
     // "Inherit (baseline: <name>)" picker entry. Falls back to the storageId
     // when no desktop entry is known.
     virtual QString displayNameFor(const Application &application) const = 0;
+
+    // The themed icon name of an Application, used for a picker entry whose
+    // Application is not among the enumerated candidates (a binding whose
+    // Application is no longer installed). Falls back to a generic application
+    // icon when no desktop entry is known.
+    virtual QString iconNameFor(const Application &application) const = 0;
 };
 
 } // namespace ads

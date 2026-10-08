@@ -177,6 +177,9 @@ QVariantList KcmBackend::pickerEntries(int component) const
     QVariantMap inherit;
     inherit.insert(QStringLiteral("storageId"), QString());
     inherit.insert(QStringLiteral("isInheritEntry"), true);
+    // Inheriting is "revert my explicit choice", so it carries the undo icon
+    // (the same one the Reset button uses) rather than an Application icon.
+    inherit.insert(QStringLiteral("icon"), QStringLiteral("edit-undo"));
     inherit.insert(QStringLiteral("displayName"),
                    baselineBinding.has_value()
                        ? i18ndc(kcmTranslationDomain,
@@ -204,8 +207,9 @@ QVariantList KcmBackend::pickerEntries(int component) const
                                                 return candidate.storageId == *effective;
                                             });
         if (!enumerated) {
-            candidates.append(
-                ApplicationCandidate{*effective, m_applicationBackend->displayNameFor(*effective)});
+            candidates.append(ApplicationCandidate{*effective,
+                                                   m_applicationBackend->displayNameFor(*effective),
+                                                   m_applicationBackend->iconNameFor(*effective)});
         }
     }
 
@@ -213,6 +217,7 @@ QVariantList KcmBackend::pickerEntries(int component) const
     for (const ApplicationCandidate &candidate : candidates) {
         entries.append(QVariantMap{{QStringLiteral("storageId"), candidate.storageId},
                                    {QStringLiteral("displayName"), candidate.displayName},
+                                   {QStringLiteral("icon"), candidate.iconName},
                                    {QStringLiteral("isInheritEntry"), false}});
     }
     return entries;

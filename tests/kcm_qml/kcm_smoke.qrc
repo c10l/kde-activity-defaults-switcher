@@ -9,5 +9,6 @@
 <RCC>
     <qresource prefix="/kcm/ads-kcm-smoke">
         <file alias="main.qml">../../kcm/ui/main.qml</file>
+        <file alias="ComponentComboBox.qml">../../kcm/ui/ComponentComboBox.qml</file>
     </qresource>
 </RCC>

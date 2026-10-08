@@ -65,9 +65,14 @@ public:
     {
         return names.value(application, application);
     }
+    QString iconNameFor(const Application &application) const override
+    {
+        return icons.value(application, QStringLiteral("application-x-executable"));
+    }
 
     QMap<Component, QList<ApplicationCandidate>> candidates;
     QHash<Application, QString> names;
+    QHash<Application, QString> icons;
 };
 
 // A fake ProfileStore that records saves and returns a scripted load.
@@ -103,6 +108,48 @@ QVariant rowValue(const KcmBackend &backend, Component component, int role)
     return {};
 }
 
+// The model carries a heading row per section as well as the component rows
+// (the Default Applications form grouping), so these count each kind.
+int componentRowCount(const KcmBackend &backend)
+{
+    QAbstractItemModel *model = backend.componentRows();
+    int count = 0;
+    for (int row = 0; row < model->rowCount(); ++row) {
+        if (!model->index(row, 0).data(ComponentRowsModel::IsSectionRole).toBool()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+// The components of the model's component rows, in row order.
+QList<int> componentRowOrder(const KcmBackend &backend)
+{
+    QAbstractItemModel *model = backend.componentRows();
+    QList<int> order;
+    for (int row = 0; row < model->rowCount(); ++row) {
+        const QModelIndex index = model->index(row, 0);
+        if (!index.data(ComponentRowsModel::IsSectionRole).toBool()) {
+            order << index.data(ComponentRowsModel::ComponentRole).toInt();
+        }
+    }
+    return order;
+}
+
+// The section titles of the model's heading rows, in row order.
+QStringList sectionHeadings(const KcmBackend &backend)
+{
+    QAbstractItemModel *model = backend.componentRows();
+    QStringList headings;
+    for (int row = 0; row < model->rowCount(); ++row) {
+        const QModelIndex index = model->index(row, 0);
+        if (index.data(ComponentRowsModel::IsSectionRole).toBool()) {
+            headings << index.data(ComponentRowsModel::SectionRole).toString();
+        }
+    }
+    return headings;
+}
+
 } // namespace
 
 class KcmTest : public QObject
@@ -122,6 +169,7 @@ private slots:
     void namelessActivityIsNeverBaseline();
 
     void componentRowsExposeEveryComponent();
+    void componentGroupsFollowTheDefaultApplicationsPage();
     void rowSourceIsExplicitForOwnBinding();
     void rowSourceIsFallbackForBaselineBinding();
     void rowSourceIsUnsetWhenNeitherBinds();
@@ -206,8 +254,8 @@ void KcmTest::emptyStateWhenNoActivities()
     QVERIFY(!backend.hasActivities());
     QVERIFY(backend.activities().isEmpty());
     QVERIFY(backend.selectedActivityId().isEmpty());
-    // The rows still exist (every component), all unset.
-    QCOMPARE(backend.componentRows()->rowCount(), 13);
+    // The rows still exist (every component, plus the section headings), all unset.
+    QCOMPARE(componentRowCount(backend), 13);
     QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::BindingSourceRole).toInt(),
              static_cast<int>(BindingSource::Unset));
 }
@@ -327,6 +375,9 @@ void KcmTest::namelessActivityIsNeverBaseline()
     QCOMPARE(backend.baselineActivityId(), QStringLiteral("work-id"));
 }
 
+// The model carries the form: every Component exactly once, in the reading
+// order of the System Settings Default Applications page, under that page's
+// section headings (Internet, Multimedia, Documents, Utilities).
 void KcmTest::componentRowsExposeEveryComponent()
 {
     auto activity = std::make_unique<FakeActivityBackend>();
@@ -338,10 +389,58 @@ void KcmTest::componentRowsExposeEveryComponent()
     backend.load();
 
     QAbstractItemModel *model = backend.componentRows();
-    QCOMPARE(model->rowCount(), 13);
+    QCOMPARE(componentRowCount(backend), 13);
+    QCOMPARE(model->rowCount(), 13 + 4);
     for (const Component component : allComponents()) {
         QVERIFY(rowValue(backend, component, ComponentRowsModel::NameRole).toString() != QString());
     }
+
+    // Every component appears exactly once, and in the Default Applications
+    // page's order.
+    QList<int> expectedOrder;
+    for (const Component component : allComponents()) {
+        expectedOrder << static_cast<int>(component);
+    }
+    const QList<int> actual = componentRowOrder(backend);
+    QCOMPARE(actual.size(), expectedOrder.size());
+    for (const int component : actual) {
+        QVERIFY(expectedOrder.contains(component));
+        expectedOrder.removeOne(component);
+    }
+    QVERIFY(expectedOrder.isEmpty());
+
+    // The headings are the Default Applications sections, in reading order, and
+    // a heading row belongs to no component.
+    QCOMPARE(sectionHeadings(backend),
+             QStringList({QStringLiteral("Internet"), QStringLiteral("Multimedia"),
+                          QStringLiteral("Documents"), QStringLiteral("Utilities")}));
+    QVERIFY(model->index(0, 0).data(ComponentRowsModel::IsSectionRole).toBool());
+    QCOMPARE(model->index(0, 0).data(ComponentRowsModel::ComponentRole).toInt(), -1);
+    QCOMPARE(model->index(0, 0).data(ComponentRowsModel::NameRole).toString(), QString());
+}
+
+// The grouping must place components in the Default Applications page's order -
+// Internet first with the web browser, Utilities last with the map - so the view
+// reads like that page rather than in enum order.
+void KcmTest::componentGroupsFollowTheDefaultApplicationsPage()
+{
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::make_unique<FakeStore>());
+    backend.load();
+
+    using enum Component;
+    QCOMPARE(
+        componentRowOrder(backend),
+        QList<int>({static_cast<int>(Browser), static_cast<int>(Email), static_cast<int>(Calendar),
+                    static_cast<int>(Tel), static_cast<int>(ImageViewer),
+                    static_cast<int>(MusicPlayer), static_cast<int>(VideoPlayer),
+                    static_cast<int>(TextEditor), static_cast<int>(PdfViewer),
+                    static_cast<int>(FileManager), static_cast<int>(Terminal),
+                    static_cast<int>(ArchiveManager), static_cast<int>(Geo)}));
 }
 
 void KcmTest::rowSourceIsExplicitForOwnBinding()
@@ -709,8 +808,10 @@ void KcmTest::pickerStartsWithInheritThenApplications()
     auto applications = std::make_unique<FakeApplicationBackend>();
     applications->candidates.insert(
         Component::Browser,
-        {ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox")},
-         ApplicationCandidate{QStringLiteral("chromium.desktop"), QStringLiteral("Chromium")}});
+        {ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox"),
+                              QStringLiteral("firefox")},
+         ApplicationCandidate{QStringLiteral("chromium.desktop"), QStringLiteral("Chromium"),
+                              QStringLiteral("chromium-browser")}});
 
     auto activity = std::make_unique<FakeActivityBackend>();
     activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
@@ -722,17 +823,25 @@ void KcmTest::pickerStartsWithInheritThenApplications()
     const QVariantList entries = backend.pickerEntries(static_cast<int>(Component::Browser));
 
     QCOMPARE(entries.size(), 3);
-    // The Inherit entry is first, with an empty storageId and the flag set.
+    // The Inherit entry is first, with an empty storageId, the flag set, and the
+    // undo icon (it is not an Application).
     QCOMPARE(entries.at(0).toMap().value(QStringLiteral("isInheritEntry")).toBool(), true);
     QCOMPARE(entries.at(0).toMap().value(QStringLiteral("storageId")).toString(), QString());
-    // Then the enumerated applications, preference order preserved.
+    QCOMPARE(entries.at(0).toMap().value(QStringLiteral("icon")).toString(),
+             QStringLiteral("edit-undo"));
+    // Then the enumerated applications, preference order preserved, each
+    // carrying the icon the picker renders beside its name.
     QCOMPARE(entries.at(1).toMap().value(QStringLiteral("storageId")).toString(),
              QStringLiteral("firefox.desktop"));
     QCOMPARE(entries.at(1).toMap().value(QStringLiteral("displayName")).toString(),
              QStringLiteral("Firefox"));
+    QCOMPARE(entries.at(1).toMap().value(QStringLiteral("icon")).toString(),
+             QStringLiteral("firefox"));
     QCOMPARE(entries.at(1).toMap().value(QStringLiteral("isInheritEntry")).toBool(), false);
     QCOMPARE(entries.at(2).toMap().value(QStringLiteral("storageId")).toString(),
              QStringLiteral("chromium.desktop"));
+    QCOMPARE(entries.at(2).toMap().value(QStringLiteral("icon")).toString(),
+             QStringLiteral("chromium-browser"));
 }
 
 void KcmTest::inheritEntryNamesTheBaselineApplication()
@@ -793,6 +902,7 @@ void KcmTest::pickerOffersNonEnumeratedExplicitBinding()
         Component::Browser,
         {ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox")}});
     applications->names.insert(QStringLiteral("gone.desktop"), QStringLiteral("Gone Browser"));
+    applications->icons.insert(QStringLiteral("gone.desktop"), QStringLiteral("gone-browser"));
 
     auto activity = std::make_unique<FakeActivityBackend>();
     activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
@@ -811,6 +921,8 @@ void KcmTest::pickerOffersNonEnumeratedExplicitBinding()
             found = true;
             QCOMPARE(entry.toMap().value(QStringLiteral("displayName")).toString(),
                      QStringLiteral("Gone Browser"));
+            QCOMPARE(entry.toMap().value(QStringLiteral("icon")).toString(),
+                     QStringLiteral("gone-browser"));
             QCOMPARE(entry.toMap().value(QStringLiteral("isInheritEntry")).toBool(), false);
         }
     }

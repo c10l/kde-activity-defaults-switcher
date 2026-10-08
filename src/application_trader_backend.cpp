@@ -11,6 +11,21 @@
 
 namespace ads {
 
+namespace {
+
+// The themed icon a picker entry shows for an Application. A desktop entry that
+// names no icon gets a generic one, so every entry keeps its icon slot (the
+// upstream Default Applications picker does the same).
+QString iconFor(const KService::Ptr &service)
+{
+    if (service && !service->icon().isEmpty()) {
+        return service->icon();
+    }
+    return QStringLiteral("application-x-executable");
+}
+
+} // namespace
+
 QList<ApplicationCandidate> ApplicationTraderBackend::applicationsFor(Component component) const
 {
     KService::List services;
@@ -37,7 +52,7 @@ QList<ApplicationCandidate> ApplicationTraderBackend::applicationsFor(Component 
             continue;
         }
         seen.insert(storageId);
-        candidates.append(ApplicationCandidate{storageId, service->name()});
+        candidates.append(ApplicationCandidate{storageId, service->name(), iconFor(service)});
     }
     return candidates;
 }
@@ -46,6 +61,11 @@ QString ApplicationTraderBackend::displayNameFor(const Application &application)
 {
     const KService::Ptr service = KService::serviceByStorageId(application);
     return service ? service->name() : application;
+}
+
+QString ApplicationTraderBackend::iconNameFor(const Application &application) const
+{
+    return iconFor(KService::serviceByStorageId(application));
 }
 
 } // namespace ads

@@ -2,10 +2,11 @@
     SPDX-License-Identifier: LGPL-3.0-or-later
     SPDX-FileCopyrightText: 2026 c10l
 
-    The KCM's view: an activity selector, a per-activity Reset, and one row per
-    Component showing its effective application. All logic lives in the C++
-    KcmBackend (reached as kcm.backend); this file only draws and forwards
-    gestures.
+    The KCM's view: an activity selector, a per-activity Reset, and the
+    Components in a form laid out like System Settings' Default Applications
+    page - category sections, right-aligned labels, and one icon picker per
+    Component. All logic lives in the C++ KcmBackend (reached as kcm.backend);
+    this file only draws and forwards gestures.
 */
 
 import QtQuick
@@ -46,6 +47,7 @@ KCMUtils.SimpleKCM {
 
             QQC2.ComboBox {
                 id: activitySelector
+                objectName: "activitySelector"
                 Layout.fillWidth: true
                 model: kcm.backend.activities
                 textRole: "name"
@@ -102,67 +104,65 @@ KCMUtils.SimpleKCM {
             }
         }
 
-        Repeater {
-            model: kcm.backend.componentRows
+        // The same two-column form the Default Applications page uses: a
+        // right-aligned label per Component, under category headings. The rows
+        // come from the backend's model, section-header rows included, so the
+        // grouping and the reading order live in one place.
+        Kirigami.FormLayout {
+            id: form
 
-            delegate: RowLayout {
-                id: componentRow
-                required property int component
-                required property string name
-                required property string effectiveApplication
-                required property int bindingSource
+            Repeater {
+                model: kcm.backend.componentRows
 
-                Layout.fillWidth: true
-                visible: kcm.backend.hasActivities
-                enabled: kcm.backend.hasActivities
-                spacing: Kirigami.Units.largeSpacing
+                delegate: Item {
+                    id: formRow
+                    required property bool isSection
+                    required property string section
+                    required property int component
+                    required property string name
+                    required property string effectiveApplication
+                    required property int bindingSource
 
-                onEffectiveApplicationChanged: componentPicker.syncSelection()
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: componentRow.name
-                }
-
-                QQC2.ComboBox {
-                    id: componentPicker
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                    // A section-header row is an empty item: FormLayout renders
+                    // its label as the heading spanning both columns.
+                    Kirigami.FormData.isSection: isSection
+                    Kirigami.FormData.label: isSection ? section : name
+                    Layout.preferredWidth: isSection ? 0 : Kirigami.Units.gridUnit * 18
+                    implicitWidth: isSection ? 0 : picker.implicitWidth
+                    implicitHeight: isSection ? 0 : picker.implicitHeight
+                    visible: kcm.backend.hasActivities
                     enabled: kcm.backend.hasActivities
-                    // The Inherit entry's label depends on the baseline, so
-                    // refresh the list after an edit (the extra reads are the
-                    // dependencies that make the binding re-evaluate).
-                    model: {
-                        componentRow.effectiveApplication
-                        componentRow.bindingSource
-                        return kcm.backend.pickerEntries(componentRow.component)
-                    }
-                    textRole: "displayName"
-                    valueRole: "storageId"
-                    font.italic: componentRow.bindingSource === Ads.BindingSource.Fallback
 
-                    function syncSelection() {
-                        if (componentRow.effectiveApplication === "") {
-                            currentIndex = 0
-                            return
+                    ComponentComboBox {
+                        id: picker
+                        objectName: "componentPicker"
+                        anchors.left: parent.left
+                        width: parent.width
+                        visible: !formRow.isSection
+                        enabled: formRow.enabled
+                        // The picker shows (and re-derives) the row's effective
+                        // Application.
+                        application: formRow.effectiveApplication
+                        // Italic marks a fallback binding (the Application comes
+                        // from the baseline activity, not this one).
+                        font.italic: formRow.bindingSource === Ads.BindingSource.Fallback
+                        // The Inherit entry's label depends on the baseline, so
+                        // refresh the list after an edit (the extra reads are the
+                        // dependencies that make the binding re-evaluate).
+                        model: {
+                            formRow.effectiveApplication
+                            formRow.bindingSource
+                            return kcm.backend.pickerEntries(formRow.component)
                         }
-                        for (let i = 0; i < model.length; ++i) {
-                            if (model[i].storageId === componentRow.effectiveApplication) {
-                                currentIndex = i
-                                return
+
+                        onActivated: {
+                            const entry = model[currentIndex]
+                            if (entry.isInheritEntry) {
+                                // Clearing falls back to the baseline (ticket 05).
+                                kcm.backend.clearBinding(formRow.component)
+                            } else {
+                                kcm.backend.setBinding(formRow.component, entry.storageId)
                             }
-                        }
-                        currentIndex = 0
-                    }
-
-                    Component.onCompleted: syncSelection()
-
-                    onActivated: {
-                        const entry = model[currentIndex]
-                        if (entry.isInheritEntry) {
-                            // Clearing falls back to the baseline (ticket 05).
-                            kcm.backend.clearBinding(componentRow.component)
-                        } else {
-                            kcm.backend.setBinding(componentRow.component, entry.storageId)
                         }
                     }
                 }

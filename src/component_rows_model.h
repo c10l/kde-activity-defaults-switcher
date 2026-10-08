@@ -10,11 +10,15 @@
 
 namespace ads {
 
-// The component rows the KCM's selected activity shows: one row per Component,
-// in the canonical component order. Each row carries the component, its
-// translated display name, its effective Application (the explicit binding,
-// else the baseline's fallback binding, else empty), the BindingSource of that
-// effective app, and the baseline's own storageId for the component.
+// The component rows the KCM's selected activity shows: one section-header row
+// per section, then one row per Component of that section, in the reading order
+// of the System Settings Default Applications page (Internet, Multimedia,
+// Documents, Utilities). Each component row carries the component, its
+// translated label, its effective Application (the explicit binding, else the
+// baseline's fallback binding, else empty), the BindingSource of that effective
+// app, and the baseline's own storageId for the component. A section-header row
+// carries only its section title (isSection true, component -1) so the view
+// renders the same grouping as the Default Applications form.
 class ComponentRowsModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -26,6 +30,8 @@ public:
         EffectiveApplicationRole,
         BindingSourceRole,
         BaselineApplicationRole,
+        SectionRole,
+        IsSectionRole,
     };
     Q_ENUM(Role)
 
@@ -35,18 +41,31 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    // Replaces every row with the given resolved effective bindings. Every
-    // Component is expected to be present (effectiveBindings guarantees it).
+    // Refreshes every component row's effective binding (the form's structure
+    // is fixed, so the rows themselves are never replaced). Every Component is
+    // expected to be present (effectiveBindings guarantees it).
     void setBindings(const QMap<Component, EffectiveBinding> &bindings);
 
-    // Replaces one row in place after an edit, signalling only that row.
+    // Replaces one component row in place after an edit, signalling only that
+    // row.
     void updateBinding(Component component, const EffectiveBinding &binding);
 
 private:
-    QMap<Component, EffectiveBinding> m_bindings;
+    struct Row {
+        bool isSection = false;
+        Component component = Component::Count;
+        QString section;
+        EffectiveBinding binding;
+    };
+
+    QList<Row> m_rows;
 };
 
-// The translated row label for a Component.
-QString componentDisplayName(Component component);
+// The translated row label for a Component, e.g. "Web browser:".
+QString componentLabel(Component component);
+
+// The translated section a Component is grouped under, mirroring the System
+// Settings Default Applications page.
+QString componentSection(Component component);
 
 } // namespace ads
