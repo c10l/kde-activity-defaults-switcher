@@ -5,6 +5,7 @@
         "Icon": "preferences-desktop-default-applications",
         "Version": "0.1"
     },
-    "X-KDE-System-Settings-Parent-Category": "applications",
+    "X-KDE-System-Settings-Parent-Category": "applications-defaults",
+    "X-KDE-Weight": 30,
     "X-KDE-Keywords": "activity,default,application,browser,terminal,profile"
 }

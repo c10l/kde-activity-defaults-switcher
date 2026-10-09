@@ -246,10 +246,13 @@ if(KF6KCMUtils_FOUND AND KF6KIO_FOUND AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND KF
     add_executable(tst_kcm_qml tests/kcm_qml/tst_kcm_qml.cpp)
     target_include_directories(tst_kcm_qml PRIVATE tests/kcm_qml)
     target_compile_definitions(tst_kcm_qml PRIVATE
-        ADS_KCM_SMOKE_PLUGIN="$<TARGET_FILE:ads-kcm-smoke>")
+        ADS_KCM_SMOKE_PLUGIN="$<TARGET_FILE:ads-kcm-smoke>"
+        # The production plugin, so the suite can check the metadata System
+        # Settings finds and places the module by (ticket 31).
+        ADS_KCM_PLUGIN="$<TARGET_FILE:activity-defaults-switcher-kcm>")
     # The plugin is dlopened at run time, so nothing links it into the test;
     # make building the test build (and place) the plugin it loads.
-    add_dependencies(tst_kcm_qml ads-kcm-smoke)
+    add_dependencies(tst_kcm_qml ads-kcm-smoke activity-defaults-switcher-kcm)
     target_link_libraries(tst_kcm_qml PRIVATE
         ads-kcm-smoke-support
         ads-kcm

@@ -17,6 +17,8 @@
 
 #include "kcm_smoke_support.h"
 
+#include <KPluginMetaData>
+
 #include "activity_backend.h"
 #include "application_backend.h"
 #include "domain.h"
@@ -285,6 +287,7 @@ private slots:
     void initTestCase();
 
     void viewLoadsWithoutWarningsOrErrors();
+    void kcmMetadataLoadsAndPlacesItWithDefaultApplications();
     void formGroupsComponentsLikeTheDefaultApplicationsPage();
     void switchingActivityRetargetsThePickers();
     void pickersAreOnlyAskedForRealComponents();
@@ -441,6 +444,33 @@ void KcmQmlSmokeTest::viewLoadsWithoutWarningsOrErrors()
     QVERIFY2(
         unique.isEmpty(),
         qPrintable(QStringLiteral("QML warnings/errors:\n%1").arg(unique.join(QLatin1Char('\n')))));
+}
+
+// The KCM plugin's metadata is what System Settings finds the module by and
+// places it with: a metadata file it cannot parse leaves the module with no id
+// at all - it disappears from System Settings instead of reporting anything
+// (ticket 26 pinned the same hazard for the kded module's plugin id).
+//
+// The path must be absolute: QPluginLoader does not resolve a relative one, and
+// KPluginMetaData then comes back empty for a plugin that is perfectly fine -
+// which is exactly how a working KCM was misdiagnosed as broken while this was
+// being verified (ticket 31).
+void KcmQmlSmokeTest::kcmMetadataLoadsAndPlacesItWithDefaultApplications()
+{
+    const QString pluginFile = QStringLiteral(ADS_KCM_PLUGIN);
+    QVERIFY2(QFile::exists(pluginFile), qPrintable(pluginFile));
+
+    const KPluginMetaData metadata(pluginFile);
+    QVERIFY2(metadata.isValid(), qPrintable(pluginFile));
+    QCOMPARE(metadata.pluginId(), QStringLiteral("activity-defaults-switcher-kcm"));
+
+    // The Default Applications page's own category, so the per-activity page
+    // sits in that group (after Default Applications' 10 and File Associations'
+    // 20) rather than as an entry of its own elsewhere.
+    QCOMPARE(metadata.rawData()
+                 .value(QStringLiteral("X-KDE-System-Settings-Parent-Category"))
+                 .toString(),
+             QStringLiteral("applications-defaults"));
 }
 
 // The form is laid out like System Settings' Default Applications page:
