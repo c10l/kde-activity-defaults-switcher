@@ -11,6 +11,15 @@ parts:
 - **System Settings module (KCM)** — a QML `KQuickConfigModule` to view, edit,
   and reset per-Activity profiles.
 
+## Screenshots
+
+The System Settings module, shown with the sample activities *Home* (baseline)
+and *Work*:
+
+| Per-activity profile | Component picker |
+| -------------------- | ---------------- |
+| ![The Activity Defaults KCM showing the Work activity's profile: one picker per component, grouped under the Default Applications category headings](docs/screenshots/kcm-overview.png) | ![The web browser picker's dropdown listing Inherit, the installed applications, and the Other… entry](docs/screenshots/kcm-picker-dropdown.png) |
+
 ## How it works
 
 The profile store (`activity-defaults-switcherrc`, one group per component) is
