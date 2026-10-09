@@ -14,7 +14,8 @@ parts:
 ## Screenshots
 
 The System Settings module, shown with the sample activities *Home* (baseline)
-and *Work*:
+and *Work*. An italic name (KMail, Okular, Konsole) is one *Work* inherits from
+the baseline rather than setting itself; *Inherit* is an unset component.
 
 | Per-activity profile | Component picker |
 | -------------------- | ---------------- |

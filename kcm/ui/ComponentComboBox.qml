@@ -12,6 +12,7 @@
 
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Templates as T
 import org.kde.kirigami as Kirigami
 
 QQC2.ComboBox {
@@ -48,9 +49,59 @@ QQC2.ComboBox {
     }
 
     // The closed field carries the selected Application's icon, as the Default
-    // Applications combo does. The org.kde.desktop style reads this hint; other
-    // styles simply draw no icon.
+    // Applications page's combo does. The org.kde desktop style reads this hint
+    // and paints the icon into the field itself; other styles draw no icon.
     Kirigami.StyleHints.iconName: (currentIndex >= 0 && currentIndex < count) ? (model[currentIndex].icon ?? "") : ""
+
+    // A style that paints the field with a QStyle-backed item (the KDE styles'
+    // KQuickStyleItem) draws the text in the application font for the QComboBox
+    // widget class - KQuickStyleItem::paint sets the painter font from
+    // QApplication::font(classNameForItem()), never from the control - which is
+    // why the italic marking a fallback binding (main.qml) has to be painted
+    // here. Only those items carry `text`; Qt's Basic style draws the field's
+    // text with its content item and is left untouched below.
+    readonly property bool qstyleField: !!(background && "text" in background)
+
+    // The field's text, drawn here so the control's font reaches it (the
+    // Qt Quick Basic style's own content item does not bind the control's font
+    // either). A T.TextField is also what the org.kde desktop style's combo
+    // expects: its mobile cursor calls positionToRectangle() on the content
+    // item. Read-only and never focused, so it only paints.
+    contentItem: T.TextField {
+        text: comboBox.displayText
+        font: comboBox.font
+        color: Kirigami.Theme.textColor
+        verticalAlignment: Text.AlignVCenter
+        readOnly: true
+        selectByMouse: false
+        activeFocusOnTab: false
+        clip: true
+    }
+
+    // A QStyle item would paint the text it was handed too, so hand it none
+    // (its `text` is the field's text), or the name is drawn twice.
+    Binding {
+        target: background
+        property: "text"
+        value: ""
+        when: comboBox.qstyleField
+    }
+
+    // The text has to clear the icon that item paints at the field's left, and
+    // the arrow it paints at its right. The style's own editable combo reserves
+    // the same 24px on the left for exactly that icon.
+    Binding {
+        target: comboBox
+        property: "leftPadding"
+        value: 24
+        when: comboBox.qstyleField
+    }
+    Binding {
+        target: comboBox
+        property: "rightPadding"
+        value: 24
+        when: comboBox.qstyleField
+    }
 
     // The entry rendering. The KDE styles host the entries in a Menu (a
     // Repeater over the delegate model, or a Menu whose delegate is this one),

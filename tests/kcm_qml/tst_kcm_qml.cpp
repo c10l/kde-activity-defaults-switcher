@@ -27,6 +27,7 @@
 
 #include <QEventLoop>
 #include <QFile>
+#include <QFont>
 #include <QJsonObject>
 #include <QLibraryInfo>
 #include <QQmlComponent>
@@ -167,6 +168,29 @@ QQuickItem *rowForComponent(QQuickItem *root, Component component)
         }
     }
     return nullptr;
+}
+
+// The picker draws its own closed field (ComponentComboBox.qml): the KDE
+// styles' QStyle-backed background paints a combo's text in the application
+// font for the QComboBox widget class (KQuickStyleItem::paint), and Qt's Basic
+// style does not bind the control's font to its field either, so the italic
+// that marks a fallback binding (main.qml) never reached the text. Only pixels
+// show that, so pin what draws the name instead: the visible content item,
+// carrying the control's font, in front of a background item that was handed no
+// text of its own (whose QStyle would otherwise paint the name again, upright).
+void verifyClosedFieldRenders(QObject *combo, const QString &text, bool italic)
+{
+    QVERIFY(combo);
+    QObject *background = combo->property("background").value<QObject *>();
+    QVERIFY(background);
+    if (background->metaObject()->indexOfProperty("text") != -1) {
+        QCOMPARE(background->property("text").toString(), QString());
+    }
+    QObject *field = combo->property("contentItem").value<QObject *>();
+    QVERIFY2(field, "the picker has no closed field");
+    QVERIFY2(field->property("visible").toBool(), "the picker's closed field is not drawn");
+    QCOMPARE(field->property("text").toString(), text);
+    QCOMPARE(field->property("font").value<QFont>().italic(), italic);
 }
 
 // The entries a ComboBox popup renders. The KDE desktop style puts them in the
@@ -660,6 +684,7 @@ void KcmQmlSmokeTest::explicitBindingRowShowsTheBoundApplication()
     QVERIFY2(combo, "no picker rendered for Browser");
     QCOMPARE(combo->property("currentValue").toString(), QStringLiteral("firefox.desktop"));
     QCOMPARE(combo->property("currentText").toString(), QStringLiteral("Firefox"));
+    verifyClosedFieldRenders(combo, QStringLiteral("Firefox"), false);
 }
 
 void KcmQmlSmokeTest::fallbackBindingRowShowsTheBaselineApplication()
@@ -675,6 +700,7 @@ void KcmQmlSmokeTest::fallbackBindingRowShowsTheBaselineApplication()
     QVERIFY2(combo, "no picker rendered for Email");
     QCOMPARE(combo->property("currentValue").toString(), QStringLiteral("kmail.desktop"));
     QCOMPARE(combo->property("currentText").toString(), QStringLiteral("KMail"));
+    verifyClosedFieldRenders(combo, QStringLiteral("KMail"), true);
 }
 
 void KcmQmlSmokeTest::unsetComponentRowShowsTheInheritEntry()
@@ -691,6 +717,8 @@ void KcmQmlSmokeTest::unsetComponentRowShowsTheInheritEntry()
     QVERIFY2(combo, "no picker rendered for Terminal");
     QCOMPARE(combo->property("currentIndex").toInt(), 0);
     QCOMPARE(combo->property("currentText").toString(), QStringLiteral("Inherit"));
+    // Only a fallback is marked; an unset Component shows the plain entry.
+    verifyClosedFieldRenders(combo, QStringLiteral("Inherit"), false);
 }
 
 void KcmQmlSmokeTest::activitySelectorMarksTheBaselineActivity()
