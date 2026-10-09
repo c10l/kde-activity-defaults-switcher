@@ -16,9 +16,10 @@ namespace ads {
 
 KcmBackend::KcmBackend(std::unique_ptr<ActivityBackend> activityBackend,
                        std::unique_ptr<ApplicationBackend> applicationBackend,
-                       std::unique_ptr<ProfileStore> store, QObject *parent)
+                       std::unique_ptr<ProfileStore> store,
+                       std::unique_ptr<ApplicationChooser> chooser, QObject *parent)
     : QObject(parent), m_activityBackend(std::move(activityBackend)),
-      m_applicationBackend(std::move(applicationBackend)),
+      m_applicationBackend(std::move(applicationBackend)), m_chooser(std::move(chooser)),
       m_store(store ? std::move(store) : std::make_unique<ProfileStore>()),
       m_rows(new ComponentRowsModel(this))
 {
@@ -182,6 +183,7 @@ QVariantList KcmBackend::pickerEntries(int component) const
     QVariantMap inherit;
     inherit.insert(QStringLiteral("storageId"), QString());
     inherit.insert(QStringLiteral("isInheritEntry"), true);
+    inherit.insert(QStringLiteral("isOtherEntry"), false);
     // Inheriting is "revert my explicit choice", so it carries the undo icon
     // (the same one the Reset button uses) rather than an Application icon.
     inherit.insert(QStringLiteral("icon"), QStringLiteral("edit-undo"));
@@ -214,13 +216,25 @@ QVariantList KcmBackend::pickerEntries(int component) const
         }
     }
 
-    entries.reserve(candidates.size() + 1);
+    entries.reserve(candidates.size() + 2);
     for (const ApplicationCandidate &candidate : candidates) {
         entries.append(QVariantMap{{QStringLiteral("storageId"), candidate.storageId},
                                    {QStringLiteral("displayName"), candidate.displayName},
                                    {QStringLiteral("icon"), candidate.iconName},
-                                   {QStringLiteral("isInheritEntry"), false}});
+                                   {QStringLiteral("isInheritEntry"), false},
+                                   {QStringLiteral("isOtherEntry"), false}});
     }
+
+    // The escape hatch the Default Applications page also offers, last like
+    // there: an Application the enumeration above does not list is chosen
+    // through the chooser (chooseApplication) rather than named here, so the
+    // entry carries no Application - only the generic icon.
+    entries.append(
+        QVariantMap{{QStringLiteral("storageId"), QString()},
+                    {QStringLiteral("displayName"), i18nd(kcmTranslationDomain, "Other…")},
+                    {QStringLiteral("icon"), QStringLiteral("application-x-shellscript")},
+                    {QStringLiteral("isInheritEntry"), false},
+                    {QStringLiteral("isOtherEntry"), true}});
     return entries;
 }
 
@@ -238,6 +252,22 @@ void KcmBackend::setBinding(int component, const QString &application)
     m_profiles[m_selectedActivityId].setBinding(selected, application);
     markPending();
     refreshRow(selected);
+}
+
+void KcmBackend::chooseApplication(int component)
+{
+    if (!m_chooser || !isValidComponent(component) || m_selectedActivityId.isEmpty()) {
+        return;
+    }
+
+    std::optional<Application> chosen = m_chooser->choose(static_cast<Component>(component));
+    if (!chosen.has_value() || chosen->isEmpty()) {
+        // Cancelled, or a bare command with no desktop entry: a Binding holds a
+        // storageId, so there is nothing to record and the row keeps its state.
+        return;
+    }
+
+    setBinding(component, *chosen);
 }
 
 void KcmBackend::clearBinding(int component)

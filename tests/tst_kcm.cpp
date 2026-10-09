@@ -75,6 +75,22 @@ public:
     QHash<Application, QString> icons;
 };
 
+// A fake ApplicationChooser: scripts the "Other…" answer so no dialog opens.
+class FakeApplicationChooser : public ApplicationChooser
+{
+public:
+    std::optional<Application> choose(Component component) override
+    {
+        ++calls;
+        chosenFor = component;
+        return result;
+    }
+
+    int calls = 0;
+    std::optional<Application> result;
+    std::optional<Component> chosenFor;
+};
+
 // A fake ProfileStore that records saves and returns a scripted load.
 class FakeStore : public ProfileStore
 {
@@ -189,6 +205,9 @@ private slots:
     void loadDiscardsPendingEdits();
 
     void pickerStartsWithInheritThenApplications();
+    void pickerEndsWithTheOtherEntry();
+    void otherEntryBindsTheChosenApplication();
+    void otherEntryWithoutAChoiceChangesNothing();
     void inheritEntryNamesTheBaselineApplication();
     void inheritEntryIsPlainWithoutBaselineBinding();
     void pickerForTerminalUsesTheTerminalEmulatorList();
@@ -861,7 +880,8 @@ void KcmTest::pickerStartsWithInheritThenApplications()
 
     const QVariantList entries = backend.pickerEntries(static_cast<int>(Component::Browser));
 
-    QCOMPARE(entries.size(), 3);
+    // Inherit, Falkon, Firefox, Other….
+    QCOMPARE(entries.size(), 4);
     // The Inherit entry is first, with an empty storageId, the flag set, and the
     // undo icon (it is not an Application).
     QCOMPARE(entries.at(0).toMap().value(QStringLiteral("isInheritEntry")).toBool(), true);
@@ -881,6 +901,118 @@ void KcmTest::pickerStartsWithInheritThenApplications()
              QStringLiteral("chromium.desktop"));
     QCOMPARE(entries.at(2).toMap().value(QStringLiteral("icon")).toString(),
              QStringLiteral("chromium-browser"));
+}
+
+// The picker ends with the Default Applications page's "Other…" entry: an
+// Application the enumeration above does not offer is chosen through the
+// chooser rather than named in the list.
+void KcmTest::pickerEndsWithTheOtherEntry()
+{
+    auto applications = std::make_unique<FakeApplicationBackend>();
+    applications->candidates.insert(
+        Component::Browser,
+        {ApplicationCandidate{QStringLiteral("firefox.desktop"), QStringLiteral("Firefox"),
+                              QStringLiteral("firefox")}});
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::move(applications), std::make_unique<FakeStore>());
+    backend.load();
+
+    const QVariantList entries = backend.pickerEntries(static_cast<int>(Component::Browser));
+    QCOMPARE(entries.size(), 3); // Inherit, Firefox, Other…
+
+    const QVariantMap other = entries.constLast().toMap();
+    QCOMPARE(other.value(QStringLiteral("isOtherEntry")).toBool(), true);
+    QCOMPARE(other.value(QStringLiteral("displayName")).toString(), QStringLiteral("Other…"));
+    // The entry is an action, not an Application: no storageId, and not the
+    // Inherit entry (which also has none).
+    QCOMPARE(other.value(QStringLiteral("storageId")).toString(), QString());
+    QCOMPARE(other.value(QStringLiteral("isInheritEntry")).toBool(), false);
+    QVERIFY(!other.value(QStringLiteral("icon")).toString().isEmpty());
+
+    // Only the Other entry carries the Other flag.
+    QCOMPARE(entries.at(0).toMap().value(QStringLiteral("isOtherEntry")).toBool(), false);
+    QCOMPARE(entries.at(1).toMap().value(QStringLiteral("isOtherEntry")).toBool(), false);
+}
+
+// Choosing through the "Other…" entry binds what the chooser returned, buffered
+// like any other edit - the view calls this with the row's component.
+void KcmTest::otherEntryBindsTheChosenApplication()
+{
+    auto chooser = std::make_unique<FakeApplicationChooser>();
+    chooser->result = QStringLiteral("org.kde.konsole.desktop");
+    FakeApplicationChooser *chooserPtr = chooser.get();
+
+    auto store = std::make_unique<FakeStore>();
+    FakeStore *storePtr = store.get();
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::move(store), std::move(chooser));
+    backend.load();
+
+    backend.chooseApplication(static_cast<int>(Component::Browser));
+
+    QCOMPARE(chooserPtr->calls, 1);
+    QCOMPARE(chooserPtr->chosenFor.value_or(Component::Count), Component::Browser);
+    QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::EffectiveApplicationRole)
+                 .toString(),
+             QStringLiteral("org.kde.konsole.desktop"));
+    QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::BindingSourceRole).toInt(),
+             static_cast<int>(BindingSource::Explicit));
+    // Buffered until Apply, like every other edit.
+    QVERIFY(backend.hasPendingChanges());
+    QCOMPARE(storePtr->saves, 0);
+}
+
+// A cancelled choice, a choice with no desktop entry, and the absence of a
+// chooser all leave the rows and the buffer untouched, so the picker keeps the
+// Activity's binding; an invalid component never reaches the chooser at all.
+void KcmTest::otherEntryWithoutAChoiceChangesNothing()
+{
+    auto chooser = std::make_unique<FakeApplicationChooser>();
+    FakeApplicationChooser *chooserPtr = chooser.get();
+
+    auto activity = std::make_unique<FakeActivityBackend>();
+    activity->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    activity->currentId = QStringLiteral("work-id");
+
+    KcmBackend backend(std::move(activity), std::make_unique<FakeApplicationBackend>(),
+                       std::make_unique<FakeStore>(), std::move(chooser));
+    backend.load();
+
+    // Cancelled.
+    chooserPtr->result = std::nullopt;
+    backend.chooseApplication(static_cast<int>(Component::Browser));
+    QVERIFY(!backend.hasPendingChanges());
+    QCOMPARE(rowValue(backend, Component::Browser, ComponentRowsModel::EffectiveApplicationRole)
+                 .toString(),
+             QString());
+
+    // A bare command: the chooser has no storageId to give.
+    chooserPtr->result = QString();
+    backend.chooseApplication(static_cast<int>(Component::Browser));
+    QVERIFY(!backend.hasPendingChanges());
+
+    // Not a Component (a section heading's -1): the chooser is never asked.
+    backend.chooseApplication(-1);
+    QCOMPARE(chooserPtr->calls, 2);
+
+    // No chooser injected at all: the action is inert rather than a crash.
+    auto other = std::make_unique<FakeActivityBackend>();
+    other->activities = {Activity{QStringLiteral("work-id"), QStringLiteral("Work")}};
+    other->currentId = QStringLiteral("work-id");
+    KcmBackend withoutChooser(std::move(other), std::make_unique<FakeApplicationBackend>(),
+                              std::make_unique<FakeStore>());
+    withoutChooser.load();
+    withoutChooser.chooseApplication(static_cast<int>(Component::Browser));
+    QVERIFY(!withoutChooser.hasPendingChanges());
 }
 
 void KcmTest::inheritEntryNamesTheBaselineApplication()
@@ -1023,7 +1155,8 @@ void KcmTest::pickerForTerminalUsesTheTerminalEmulatorList()
     backend.load();
 
     const QVariantList entries = backend.pickerEntries(static_cast<int>(Component::Terminal));
-    QCOMPARE(entries.size(), 2);
+    // Inherit, the terminal emulator, Other….
+    QCOMPARE(entries.size(), 3);
     QCOMPARE(entries.at(1).toMap().value(QStringLiteral("storageId")).toString(),
              QStringLiteral("org.kde.konsole.desktop"));
 }

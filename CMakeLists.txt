@@ -201,11 +201,13 @@ endif()
 
 # --- KCM (System Settings module, ticket 07) ---
 # A QML KQuickConfigModule (kcm/) over the testable ads-kcm backend. Built only
-# when the KCMUtils dev package and the KActivities-backed reader are present;
-# ads-kcm and tst_kcm build regardless so the backend stays testable anywhere.
+# when the KCMUtils dev package, the KActivities-backed reader and KIO (the
+# "Other…" chooser is KOpenWithDialog) are present; ads-kcm and tst_kcm build
+# regardless so the backend stays testable anywhere.
 find_package(KF6KCMUtils QUIET)
+find_package(KF6KIO QUIET)
 find_package(Qt6 COMPONENTS Qml Quick QUIET)
-if(KF6KCMUtils_FOUND AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
+if(KF6KCMUtils_FOUND AND KF6KIO_FOUND AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND KF6DBusAddons_FOUND AND PlasmaActivities_FOUND)
     add_subdirectory(kcm)
 
     # --- offscreen QML smoke test (ticket 22) ---

@@ -36,7 +36,7 @@ See the repository glossary (`CONTEXT.md`) for the domain vocabulary and
 - Qt 6 (`Core`, `Test`, QML)
 - KF6 (`Service`, `Config`, `CoreAddons`)
 - For the kded6 module: KF6 `DBusAddons` and Plasma Activities **dev** packages
-- For the KCM: KF6 `KCMUtils`, `KDeclarative` and `I18n` **dev** packages,
+- For the KCM: KF6 `KCMUtils`, `KDeclarative`, `KIO` and `I18n` **dev** packages,
   plus the Kirigami QML modules
 
 `make deps` (via `scripts/setup-deps.sh`) installs the required KF6 / Plasma /

@@ -5,6 +5,7 @@
 
 #include "activity_backend.h"
 #include "application_backend.h"
+#include "application_chooser.h"
 #include "domain.h"
 #include "store.h"
 
@@ -42,7 +43,8 @@ class KcmBackend : public QObject
 public:
     KcmBackend(std::unique_ptr<ActivityBackend> activityBackend,
                std::unique_ptr<ApplicationBackend> applicationBackend,
-               std::unique_ptr<ProfileStore> store, QObject *parent = nullptr);
+               std::unique_ptr<ProfileStore> store,
+               std::unique_ptr<ApplicationChooser> chooser = {}, QObject *parent = nullptr);
 
     // Snapshot load: reads the store and the activity list once, selects the
     // baseline activity and defaults the selector to the current activity (or
@@ -65,12 +67,17 @@ public:
 
     // The picker's candidates for a component: the Inherit entry first (labelled
     // "Inherit (baseline: <name>)" when the baseline binds it, plain "Inherit"
-    // otherwise), then the enumerated applications. Each entry is a map with
-    // storageId, displayName, icon (the themed icon name the picker shows) and
-    // isInheritEntry.
+    // otherwise), then the enumerated applications, then the "Other…" entry.
+    // Each entry is a map with storageId, displayName, icon (the themed icon name
+    // the picker shows), isInheritEntry and isOtherEntry.
     Q_INVOKABLE QVariantList pickerEntries(int component) const;
     // Sets an explicit binding for the selected activity. Buffered, not saved.
     Q_INVOKABLE void setBinding(int component, const QString &application);
+    // The user picked the picker's "Other…" entry: asks the ApplicationChooser
+    // for an Application and binds it (buffered, like any other edit). A
+    // cancelled choice, a chooser that returns no Application, and the absence of
+    // a chooser all change nothing.
+    Q_INVOKABLE void chooseApplication(int component);
     // Removes the explicit binding, so the component falls back to the baseline.
     // Buffered, not saved.
     Q_INVOKABLE void clearBinding(int component);
@@ -91,6 +98,7 @@ private:
 
     std::unique_ptr<ActivityBackend> m_activityBackend;
     std::unique_ptr<ApplicationBackend> m_applicationBackend;
+    std::unique_ptr<ApplicationChooser> m_chooser;
     std::unique_ptr<ProfileStore> m_store;
     ComponentRowsModel *m_rows = nullptr;
     QMap<ActivityId, Profile> m_profiles;

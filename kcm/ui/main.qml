@@ -164,6 +164,16 @@ KCMUtils.SimpleKCM {
                             if (entry.isInheritEntry) {
                                 // Clearing falls back to the baseline (ticket 05).
                                 kcm.backend.clearBinding(formRow.component)
+                            } else if (entry.isOtherEntry) {
+                                // The "Other…" entry asks the chooser for an
+                                // Application the list does not offer (the
+                                // Default Applications page's escape hatch).
+                                // The chooser can be cancelled, in which case
+                                // nothing changed, so re-derive the selection
+                                // either way rather than leaving the field on
+                                // the entry that was only ever an action.
+                                kcm.backend.chooseApplication(formRow.component)
+                                syncSelection()
                             } else {
                                 kcm.backend.setBinding(formRow.component, entry.storageId)
                             }

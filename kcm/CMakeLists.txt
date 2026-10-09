@@ -14,6 +14,7 @@ kcmutils_add_qml_kcm(activity-defaults-switcher-kcm
     SOURCES
         kcm.cpp
         kcm_shell.cpp
+        kopenwithdialog_chooser.cpp
         ${CMAKE_SOURCE_DIR}/src/kactivities_backend.cpp
 )
 target_include_directories(activity-defaults-switcher-kcm PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -21,6 +22,9 @@ target_link_libraries(activity-defaults-switcher-kcm PRIVATE
     ads-kcm
     KF6::KCMUtilsQuick
     KF6::I18n
+    # KOpenWithDialog, the "Other…" chooser (kopenwithdialog_chooser.cpp). It
+    # stays out of ads-kcm so the KCM backend and its tests need no Widgets/KIO.
+    KF6::KIOWidgets
     Plasma::Activities
     Qt6::Qml
     Qt6::Quick

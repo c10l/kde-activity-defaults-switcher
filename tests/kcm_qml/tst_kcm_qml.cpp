@@ -91,6 +91,23 @@ public:
     mutable QList<int> requestedComponents;
 };
 
+// A fake ApplicationChooser: scripts the "Other…" answer so the picker's escape
+// hatch is exercised through the view without a dialog.
+class FakeApplicationChooser : public ApplicationChooser
+{
+public:
+    std::optional<Application> choose(Component component) override
+    {
+        ++calls;
+        chosenFor = component;
+        return result;
+    }
+
+    int calls = 0;
+    std::optional<Application> result;
+    std::optional<Component> chosenFor;
+};
+
 // A fake ProfileStore returning a scripted snapshot.
 class FakeStore : public ProfileStore
 {
@@ -278,6 +295,10 @@ private slots:
     void activitySelectorMarksTheBaselineActivity();
     void shellWiringAppliesOnApplyNotInstantly();
     void emptyStateHidesPickersAndDisablesEditing();
+    // Declared last: they bind an Application and so change the fixture state
+    // for the rows the earlier tests assert on.
+    void otherEntryAsksTheChooserAndBindsTheAnswer();
+    void cancellingTheOtherEntryKeepsTheRowsApplication();
     void cleanupTestCase();
 
 private:
@@ -291,6 +312,7 @@ private:
     FakeStore *m_store = nullptr;
     FakeActivityBackend *m_activityBackend = nullptr;
     FakeApplicationBackend *m_applications = nullptr;
+    FakeApplicationChooser *m_chooser = nullptr;
     // The engine handed to the module loader, so the test can observe its
     // warnings from the moment mainUi() loads the view (module.engine() is only
     // meaningful after that).
@@ -349,6 +371,8 @@ void KcmQmlSmokeTest::initTestCase()
 
     auto applications = std::make_unique<FakeApplicationBackend>();
     m_applications = applications.get();
+    auto chooser = std::make_unique<FakeApplicationChooser>();
+    m_chooser = chooser.get();
     applications->candidates.insert(
         Component::Browser,
         {
@@ -365,7 +389,7 @@ void KcmQmlSmokeTest::initTestCase()
     applications->names.insert(QStringLiteral("org.kde.ark.desktop"), QStringLiteral("Ark"));
 
     m_backend = std::make_unique<KcmBackend>(std::move(activityBackend), std::move(applications),
-                                             std::move(store));
+                                             std::move(store), std::move(chooser));
     m_backend->load();
     kcm_smoke::setBackend(m_backend.get());
 
@@ -546,6 +570,10 @@ void KcmQmlSmokeTest::pickerDropdownListsTheApplications()
                     {QStringLiteral("displayName"), QStringLiteral("Firefox")},
                     {QStringLiteral("icon"), QStringLiteral("firefox")},
                     {QStringLiteral("isInheritEntry"), false}},
+        QVariantMap{{QStringLiteral("storageId"), QString()},
+                    {QStringLiteral("displayName"), QStringLiteral("Other…")},
+                    {QStringLiteral("icon"), QStringLiteral("application-x-shellscript")},
+                    {QStringLiteral("isOtherEntry"), true}},
     };
     picker->setProperty("model", model);
     picker->setProperty("application", QStringLiteral("firefox.desktop"));
@@ -568,10 +596,12 @@ void KcmQmlSmokeTest::pickerDropdownListsTheApplications()
     QTRY_VERIFY_WITH_TIMEOUT(popup->property("visible").toBool(), 2000);
 
     const QList<QQuickItem *> entries = popupEntries(popup);
-    QCOMPARE(entries.size(), 3);
+    QCOMPARE(entries.size(), 4);
     QCOMPARE(entries.at(0)->property("text").toString(), QStringLiteral("Inherit"));
     QCOMPARE(entries.at(1)->property("text").toString(), QStringLiteral("Falkon"));
     QCOMPARE(entries.at(2)->property("text").toString(), QStringLiteral("Firefox"));
+    // The escape hatch the Default Applications page also lists, last.
+    QCOMPARE(entries.at(3)->property("text").toString(), QStringLiteral("Other…"));
 
     // Every entry is laid out at its popup's width - not collapsed to the width
     // of an icon, which is what the broken delegate left behind (28px).
@@ -764,6 +794,74 @@ void KcmQmlSmokeTest::emptyStateHidesPickersAndDisablesEditing()
     m_backend->load();
     QVERIFY(!emptyStatePlaceholder(root) ||
             !emptyStatePlaceholder(root)->property("visible").toBool());
+}
+
+// The picker's last entry is the Default Applications page's "Other…", and
+// choosing it asks the ApplicationChooser: the answer is bound to the row, and
+// the picker re-derives its selection so the field shows the chosen Application
+// rather than the entry that was only ever an action.
+void KcmQmlSmokeTest::otherEntryAsksTheChooserAndBindsTheAnswer()
+{
+    QQuickItem *root = m_module->mainUi();
+    QVERIFY(root);
+
+    m_backend->load();
+    m_backend->setSelectedActivityId(QStringLiteral("work-id"));
+    QObject *combo = comboForComponent(root, Component::Browser);
+    QVERIFY(combo);
+
+    const QVariantList entries = combo->property("model").toList();
+    QCOMPARE(entries.size(), 4); // Inherit, Falkon, Firefox, Other…
+    const QVariantMap other = entries.constLast().toMap();
+    QCOMPARE(other.value(QStringLiteral("isOtherEntry")).toBool(), true);
+    QCOMPARE(other.value(QStringLiteral("displayName")).toString(), QStringLiteral("Other…"));
+
+    m_chooser->result = QStringLiteral("org.kde.konsole.desktop");
+    const int otherIndex = entries.size() - 1;
+    combo->setProperty("currentIndex", otherIndex);
+    QVERIFY(QMetaObject::invokeMethod(combo, "activated", Qt::DirectConnection,
+                                      Q_ARG(int, otherIndex)));
+
+    QCOMPARE(m_chooser->calls, 1);
+    QCOMPARE(m_chooser->chosenFor.value_or(Component::Count), Component::Browser);
+    QCOMPARE(combo->property("currentValue").toString(), QStringLiteral("org.kde.konsole.desktop"));
+    QCOMPARE(combo->property("currentText").toString(), QStringLiteral("org.kde.konsole.desktop"));
+    QCOMPARE(rowForComponent(root, Component::Browser)->property("effectiveApplication").toString(),
+             QStringLiteral("org.kde.konsole.desktop"));
+    QCOMPARE(m_backend->hasPendingChanges(), true);
+
+    m_backend->load(); // restore the fixture for any later run
+}
+
+// Cancelling the chooser (and a chooser that returns no Application) leaves the
+// row on the Activity's binding: the field must not stay stuck on the "Other…"
+// entry, which is an action and never a state.
+void KcmQmlSmokeTest::cancellingTheOtherEntryKeepsTheRowsApplication()
+{
+    QQuickItem *root = m_module->mainUi();
+    QVERIFY(root);
+
+    m_backend->load();
+    m_backend->setSelectedActivityId(QStringLiteral("work-id"));
+    QObject *combo = comboForComponent(root, Component::Browser);
+    QVERIFY(combo);
+    QCOMPARE(combo->property("currentValue").toString(), QStringLiteral("firefox.desktop"));
+
+    const int otherIndex = combo->property("model").toList().size() - 1;
+    const int callsBefore = m_chooser->calls;
+    m_chooser->result = std::nullopt;
+    combo->setProperty("currentIndex", otherIndex);
+    QVERIFY(QMetaObject::invokeMethod(combo, "activated", Qt::DirectConnection,
+                                      Q_ARG(int, otherIndex)));
+
+    QCOMPARE(m_chooser->calls, callsBefore + 1);
+    QCOMPARE(combo->property("currentValue").toString(), QStringLiteral("firefox.desktop"));
+    QCOMPARE(combo->property("currentText").toString(), QStringLiteral("Firefox"));
+    QCOMPARE(rowForComponent(root, Component::Browser)->property("effectiveApplication").toString(),
+             QStringLiteral("firefox.desktop"));
+    QCOMPARE(m_backend->hasPendingChanges(), false);
+
+    m_backend->load();
 }
 
 void KcmQmlSmokeTest::cleanupTestCase()
