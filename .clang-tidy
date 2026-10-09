@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 c10l
+
+---
+# clang-tidy config for activity-defaults-switcher.
+#
+# The check set is pinned explicitly. clang-tidy 23 made an empty check set
+# fatal ("Error: no checks enabled.") before it analyses anything, so a run
+# with no config at all fails on every file — including untouched ones. The
+# pinned set also keeps the gate identical across the clang-tidy versions CI
+# (Debian) and contributors (Homebrew LLVM) use.
+#
+# It is the compiler diagnostics plus the core static analyzer, matching what
+# `make tidy` was effectively checking before. The analyzer's opt-in checks are
+# excluded: they are not meant to run by default, and
+# clang-analyzer-optin.core.EnumCastOutOfRange fires on the deliberate
+# out-of-range Component casts in tst_writer.cpp's robustness loop.
+Checks: 'clang-diagnostic-*,clang-analyzer-*,-clang-analyzer-optin*'

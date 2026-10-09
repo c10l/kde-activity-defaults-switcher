@@ -118,3 +118,10 @@ enumeration source in `ApplicationTraderBackend`).
 - `tests/kcm_qml/tst_kcm_qml.cpp` — `formGroupsComponentsLikeTheDefaultApplicationsPage`,
   `switchingActivityRetargetsThePickers`.
 - Upstream: `plasma-workspace/kcms/componentchooser/{ui/main.qml,ui/ComponentComboBox.qml,applicationmodel.cpp}`.
+
+### Note: resolved in ticket 32
+
+- The tooling-drift bullet above is fixed: `.clang-tidy` now pins the check set
+  (`clang-diagnostic-*,clang-analyzer-*,-clang-analyzer-optin*`), so `make tidy`
+  runs to completion on clang-tidy 23 instead of exiting with
+  `Error: no checks enabled.`

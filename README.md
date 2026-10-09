@@ -105,6 +105,11 @@ the corresponding tool (`clang-format` / `clang-tidy`) is not in `PATH`. The
 combined `make lint` gate instead skips missing tools and only fails when an
 installed tool reports a problem.
 
+The clang-tidy check set is pinned in `.clang-tidy` (compiler diagnostics plus
+the core static analyzer). It is pinned rather than left to the tool default
+because clang-tidy 23 treats an empty check set as a fatal error, and because it
+keeps the gate identical on the clang-tidy versions CI and contributors use.
+
 The build, test, and tool settings are overridable:
 
 ```sh

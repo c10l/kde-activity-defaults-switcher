@@ -48,3 +48,10 @@
 - `src/kactivities_backend.h` — the missing `override` on `activityName`.
 - `src/activity_backend.h` — the `virtual ... = 0` base decl.
 - `deps/usr/include/PlasmaActivities/plasmaactivities/info.h`, `consumer.h` — the KActivities semantics (unchanged).
+
+### Note: resolved in ticket 32
+
+- `.clang-tidy` now pins `Checks` (`clang-diagnostic-*,clang-analyzer-*,-clang-analyzer-optin*`),
+  so `make tidy` runs on clang-tidy 23 as well. The "`make tidy` reports no real
+  warnings" criterion above now holds on both the Debian and the Homebrew
+  clang-tidy, not just the version it was written against.
